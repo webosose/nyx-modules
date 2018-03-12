@@ -1,0 +1,334 @@
+// Copyright (c) 2013-2018 LG Electronics, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+
+/*
+*******************************************************************
+* @file os_info.c
+*
+* @brief The OS_INFO module implementation.
+*******************************************************************
+*/
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include <nyx/nyx_module.h>
+#include <nyx/module/nyx_utils.h>
+
+static const char *const read_kernel_version = "uname -r";
+static const char *const read_core_os_release = "lsb_release -sr";
+static const char *const read_core_os_name = "lsb_release -si";
+static const char *const read_core_os_release_codename = "lsb_release -sc";
+static const char *const webos_image_name_file =
+    "@WEBOS_INSTALL_WEBOS_SYSCONFDIR@/build/image-name";
+
+typedef enum
+{
+	OS_INFO_MODE_PIPE,
+	OS_INFO_MODE_FILE,
+} os_info_mode_t;
+
+// Internal OS info structure
+typedef struct
+{
+	nyx_device_t reserved;  //reserved for the original nyx_device_t usage
+	const char *kernel_version;
+	const char *core_os_release;
+	const char *core_os_name;
+	const char *core_os_release_codename;
+	const char *webos_imagename;
+} os_info_device_t;
+
+NYX_DECLARE_MODULE(NYX_DEVICE_OS_INFO, "OSInfo");
+
+/*
+* Input parameters:
+* command - path to a file (when using OS_INFO_MODE_FILE)
+*           or a command line command to execute (when using OS_INFO_MODE_PIPE)
+* target  - output from file or command. If *target != NULL, it is assumed to
+*           contain valid information and contents will not be changed
+* mode    - the mode used for running 'command'. Currently only valid are
+*           OS_INFO_MODE_FILE and OS_INFO_MODE_PIPE
+*/
+static nyx_error_t read_info(const char *command, char **target,
+                             os_info_mode_t mode)
+{
+	FILE *fp = NULL;
+	nyx_error_t retVal = NYX_ERROR_GENERIC;
+
+	// check for existing string and return if found
+	if (NULL != *target)
+	{
+		return NYX_ERROR_NONE;
+	}
+
+	/* Open the command/file for reading. Remember to change close method as well */
+	switch (mode)
+	{
+		case OS_INFO_MODE_PIPE:
+			fp = popen(command, "r");
+			break;
+
+		case OS_INFO_MODE_FILE:
+			fp = fopen(command, "r");
+			break;
+	}
+
+	if (NULL != fp)
+	{
+		size_t temp_size = 0;
+		ssize_t read_count = 0;
+		// when delim is set to 'EOF' getdelim supports multiple lines
+		read_count = getdelim(target, &temp_size, EOF, fp);
+
+		if (-1 == read_count)
+		{
+			retVal = NYX_ERROR_DEVICE_UNAVAILABLE;
+		}
+		else
+		{
+			// remove unnecessary extra endline character
+			if (read_count > 0 && (*target)[read_count - 1] == '\n')
+			{
+				(*target)[read_count - 1] = '\0';
+			}
+
+			retVal = NYX_ERROR_NONE;
+
+		}
+
+
+		/* close */
+		switch (mode)
+		{
+			case OS_INFO_MODE_PIPE:
+				pclose(fp);
+				break;
+
+			case OS_INFO_MODE_FILE:
+				fclose(fp);
+				break;
+		}
+	}
+	else
+	{
+		retVal = NYX_ERROR_DEVICE_UNAVAILABLE;
+	}
+
+	return retVal;
+}
+
+nyx_error_t nyx_module_open(nyx_instance_t i, nyx_device_t **d)
+{
+	if (NULL == d)
+	{
+		return NYX_ERROR_INVALID_VALUE;
+	}
+
+	*d = NULL;
+	// use calloc to initialize 'reserved' member to 0
+	os_info_device_t *device = (os_info_device_t *) calloc(1,
+	                           sizeof(os_info_device_t));
+
+	if (NULL != device)
+	{
+		// set all strings to NULL initially
+		device->core_os_release = NULL;
+		device->core_os_release_codename = NULL;
+		device->core_os_name = NULL;
+		device->kernel_version = NULL;
+		device->webos_imagename = NULL;
+
+		nyx_module_register_method(i, (nyx_device_t *) device,
+		                           NYX_OS_INFO_QUERY_MODULE_METHOD,
+		                           "os_info_query");
+
+		*d = (nyx_device_t *) device;
+
+		return NYX_ERROR_NONE;
+	}
+
+	return NYX_ERROR_OUT_OF_MEMORY;
+}
+
+nyx_error_t nyx_module_close(nyx_device_handle_t d)
+{
+	if (NULL == d)
+	{
+		return NYX_ERROR_INVALID_HANDLE;
+	}
+
+	os_info_device_t *os_info = (os_info_device_t *) d;
+
+	if (NULL != os_info->kernel_version)
+	{
+		free((void *) os_info->kernel_version);
+		os_info->kernel_version = NULL;
+	}
+
+	if (NULL != os_info->core_os_release)
+	{
+		free((void *) os_info->core_os_release);
+		os_info->core_os_release = NULL;
+	}
+
+	if (NULL != os_info->core_os_release_codename)
+	{
+		free((void *) os_info->core_os_release_codename);
+		os_info->core_os_release_codename = NULL;
+	}
+
+	if (NULL != os_info->core_os_name)
+	{
+		free((void *) os_info->core_os_name);
+		os_info->core_os_name = NULL;
+	}
+
+	if (NULL != os_info->webos_imagename)
+	{
+		free((void *) os_info->webos_imagename);
+		os_info->webos_imagename = NULL;
+	}
+
+	free(os_info);
+
+	return NYX_ERROR_NONE;
+}
+
+nyx_error_t os_info_query(nyx_device_handle_t d, nyx_os_info_query_t query,
+                          const char **dest)
+{
+	// default error is NYX_ERROR_NONE to minimize code amount
+	nyx_error_t error = NYX_ERROR_NONE;
+
+	if (NULL == d)
+	{
+		return NYX_ERROR_INVALID_HANDLE;
+	}
+
+	os_info_device_t *os_info = (os_info_device_t *) d;
+	// return an empty string if there's an error
+	*dest = "";
+
+	switch (query)
+	{
+		case NYX_OS_INFO_CORE_OS_KERNEL_VERSION:
+			error = read_info(read_kernel_version,
+			                  (char **)&os_info->kernel_version, OS_INFO_MODE_PIPE);
+
+			if (NYX_ERROR_NONE == error)
+			{
+				*dest = os_info->kernel_version;
+			}
+
+			break;
+
+		case NYX_OS_INFO_WEBOS_IMAGENAME:
+			error = read_info(webos_image_name_file,
+			                  (char **)&os_info->webos_imagename, OS_INFO_MODE_FILE);
+
+			if (NYX_ERROR_NONE == error)
+			{
+				*dest = os_info->webos_imagename;
+			}
+
+			break;
+
+		case NYX_OS_INFO_WEBOS_BUILD_ID:
+			*dest = "@WEBOS_DISTRO_BUILD_ID@";
+			break;
+
+		case NYX_OS_INFO_WEBOS_RELEASE_CODENAME:
+			*dest = "@WEBOS_DISTRO_RELEASE_CODENAME@";
+			break;
+
+		case NYX_OS_INFO_WEBOS_API_VERSION:
+			*dest = "@WEBOS_DISTRO_API_VERSION@";
+			break;
+
+		case NYX_OS_INFO_WEBOS_NAME:
+			*dest = "@DISTRO_NAME@";
+			break;
+
+		case NYX_OS_INFO_WEBOS_RELEASE:
+			*dest = "@DISTRO_VERSION@";
+			break;
+
+		case NYX_OS_INFO_WEBOS_PRERELEASE:
+			*dest = "@WEBOS_DISTRO_PRERELEASE@";
+			break;
+
+		case NYX_OS_INFO_WEBOS_MANUFACTURING_VERSION:
+			*dest = "@WEBOS_DISTRO_MANUFACTURING_VERSION@";
+			break;
+
+		case NYX_OS_INFO_CORE_OS_NAME:
+			error = read_info(read_core_os_name,
+			                  (char **)&os_info->core_os_name, OS_INFO_MODE_PIPE);
+
+			if (NYX_ERROR_NONE == error)
+			{
+				*dest = os_info->core_os_name;
+			}
+
+			break;
+
+		case NYX_OS_INFO_CORE_OS_RELEASE:
+			error = read_info(read_core_os_release,
+			                  (char **)&os_info->core_os_release, OS_INFO_MODE_PIPE);
+
+			if (NYX_ERROR_NONE == error)
+			{
+				*dest = os_info->core_os_release;
+			}
+
+			break;
+
+		case NYX_OS_INFO_CORE_OS_RELEASE_CODENAME:
+			error = read_info(read_core_os_release_codename,
+			                  (char **)&os_info->core_os_release_codename,
+			                  OS_INFO_MODE_PIPE);
+
+			if (NYX_ERROR_NONE == error)
+			{
+				*dest = os_info->core_os_release_codename;
+			}
+
+			break;
+
+		case NYX_OS_INFO_ENCRYPTION_KEY_TYPE:
+			if (sizeof("@ENCRYPTION_KEY_TYPE@") == 1)
+			{
+				error = NYX_ERROR_NOT_IMPLEMENTED;
+			}
+			else
+			{
+				*dest = "@ENCRYPTION_KEY_TYPE@";
+			}
+
+			break;
+
+		case NYX_OS_INFO_WEBOS_BUILD_DATETIME:
+			*dest = "@WEBOS_BUILD_DATETIME@";
+			break;
+
+		default:
+			error = NYX_ERROR_INVALID_VALUE;
+			break;
+	}
+
+	return error;
+}
