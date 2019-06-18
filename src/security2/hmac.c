@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2019 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,29 +40,49 @@ nyx_error_t hmac(const unsigned char *keydata, int keybits,
                  int srclen, unsigned char *dest,
                  int *destlen)
 {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	HMAC_CTX hmacctx;
+#else
+	HMAC_CTX *hmacctx;
+        hmacctx = HMAC_CTX_new();
+        if (!hmacctx) {
+            nyx_debug("Out of memory: EVP_CIPHER_CTX");
+            return NYX_ERROR_OUT_OF_MEMORY;
+        }
+#endif
 	nyx_error_t result = NYX_ERROR_NONE;
 
 	const EVP_MD *type = EVP_sha1();
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	HMAC_CTX_init(&hmacctx);
-
 	if (!HMAC_Init_ex(&hmacctx, (const void *)keydata,
+                          keybits / 8, type, NULL))
+#else
+	if (!HMAC_Init_ex(hmacctx, (const void *)keydata,
 	                  keybits / 8, type, NULL))
+#endif
 	{
 		nyx_debug("HMAC_Init failed");
 		result = NYX_ERROR_GENERIC;
 		goto out;
 	}
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	if (!HMAC_Update(&hmacctx, src, srclen))
+#else
+	if (!HMAC_Update(hmacctx, src, srclen))
+#endif
 	{
 		nyx_debug("HMAC_Update failed");
 		result = NYX_ERROR_GENERIC;
 		goto out;
 	}
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	if (!HMAC_Final(&hmacctx, dest,
+                        (unsigned int *)destlen))
+#else
+	if (!HMAC_Final(hmacctx, dest,
 	                (unsigned int *)destlen))
+#endif
 	{
 		nyx_debug("HMAC_Final failed");
 		result = NYX_ERROR_GENERIC;
@@ -70,6 +90,11 @@ nyx_error_t hmac(const unsigned char *keydata, int keybits,
 	}
 
 out:
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	HMAC_CTX_cleanup(&hmacctx);
+#else
+	HMAC_CTX_reset(hmacctx);
+        HMAC_CTX_free(hmacctx);
+#endif
 	return result;
 }

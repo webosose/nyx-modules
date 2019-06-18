@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2019 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -67,8 +67,16 @@ nyx_error_t des3_crypt(const unsigned char *keydata, int encrypt,
 	{
 		return NYX_ERROR_INVALID_VALUE;
 	}
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	EVP_CIPHER_CTX ctx;
+#else
+	EVP_CIPHER_CTX *ctx;
+        ctx = EVP_CIPHER_CTX_new();
+        if (!ctx) {
+            nyx_debug("Out of memory: EVP_CIPHER_CTX");
+            return NYX_ERROR_OUT_OF_MEMORY;
+        }
+#endif
 	const EVP_CIPHER *cipher;
 
 	nyx_error_t result = NYX_ERROR_NONE;
@@ -93,16 +101,28 @@ nyx_error_t des3_crypt(const unsigned char *keydata, int encrypt,
 	}
 
 	int updateoutlen, finaloutlen;
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	EVP_CIPHER_CTX_init(&ctx);
+#else
+	EVP_CIPHER_CTX_init(ctx);
+#endif
 	updateoutlen = *destlen;
 
 	if (encrypt)
 	{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 		EVP_EncryptInit(&ctx, cipher, keydata, iv);
 
-		if (!EVP_EncryptUpdate(&ctx, dest,
+                if (!EVP_EncryptUpdate(&ctx, dest,
+                                       &updateoutlen, (unsigned char *)src,
+                                       srclen))
+#else
+		EVP_EncryptInit(ctx, cipher, keydata, iv);
+
+		if (!EVP_EncryptUpdate(ctx, dest,
 		                       &updateoutlen, (unsigned char *)src,
 		                       srclen))
+#endif
 		{
 			nyx_debug("EVP_CipherUpdate failed");
 			ERR_print_errors_fp(stderr);
@@ -111,8 +131,11 @@ nyx_error_t des3_crypt(const unsigned char *keydata, int encrypt,
 		}
 
 		finaloutlen = *destlen - updateoutlen;
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 		if (!EVP_EncryptFinal(&ctx, dest + updateoutlen, &finaloutlen))
+#else
+		if (!EVP_EncryptFinal(ctx, dest + updateoutlen, &finaloutlen))
+#endif
 		{
 			nyx_debug("EVP_CipherFinal failed");
 			ERR_print_errors_fp(stderr);
@@ -122,11 +145,19 @@ nyx_error_t des3_crypt(const unsigned char *keydata, int encrypt,
 	}
 	else
 	{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 		EVP_DecryptInit(&ctx, cipher, keydata, iv);
 
-		if (!EVP_DecryptUpdate(&ctx, dest,
+                if (!EVP_DecryptUpdate(&ctx, dest,
+                                       &updateoutlen, (unsigned char *)src,
+                                       srclen))
+#else
+		EVP_DecryptInit(ctx, cipher, keydata, iv);
+
+		if (!EVP_DecryptUpdate(ctx, dest,
 		                       &updateoutlen, (unsigned char *)src,
 		                       srclen))
+#endif
 		{
 			nyx_debug("EVP_CipherUpdate failed");
 			ERR_print_errors_fp(stderr);
@@ -139,11 +170,19 @@ nyx_error_t des3_crypt(const unsigned char *keydata, int encrypt,
 		if (nextIvLen == DES3_BLOCK_SIZE && padding == NYX_SECURITY_PADDING_NONE &&
 		        mode != NYX_SECURITY_MODE_ECB)
 		{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 			memcpy(nextIv, &ctx.iv, DES3_BLOCK_SIZE);
-		}
-
-		if (!EVP_DecryptFinal(&ctx, dest + updateoutlen,
-		                      (int *) &finaloutlen))
+#else
+			EVP_DecryptInit_ex(ctx, cipher, NULL, keydata, nextIv);
+#endif
+                }
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+                if (!EVP_DecryptFinal(&ctx, dest + updateoutlen,
+                                      (int *) &finaloutlen))
+#else
+		if (!EVP_DecryptFinal(ctx, dest + updateoutlen,
+                                      (int *) &finaloutlen))
+#endif
 		{
 			nyx_debug("EVP_CipherFinal failed");
 			ERR_print_errors_fp(stderr);
@@ -154,7 +193,12 @@ nyx_error_t des3_crypt(const unsigned char *keydata, int encrypt,
 
 	*destlen = updateoutlen + finaloutlen;
 out:
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	EVP_CIPHER_CTX_cleanup(&ctx);
+#else
+	EVP_CIPHER_CTX_reset(ctx);
+        EVP_CIPHER_CTX_free(ctx);
+#endif
 	return result;
 }
 

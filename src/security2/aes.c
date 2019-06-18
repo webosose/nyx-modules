@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2018 LG Electronics, Inc.
+// Copyright (c) 2016-2019 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -118,26 +118,42 @@ nyx_error_t aes_crypt(const unsigned char *keydata, int keybits, int encrypt,
 	{
 		return NYX_ERROR_INVALID_VALUE;
 	}
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	EVP_CIPHER_CTX ctx;
-	EVP_CIPHER_CTX_init(&ctx);
-	EVP_CipherInit_ex(&ctx, algo->cipher_fun(), NULL, NULL, NULL, encrypt);
-	EVP_CIPHER_CTX_set_key_length(&ctx, keybits);
-	EVP_CipherInit_ex(&ctx, NULL, NULL, keydata, iv, encrypt);
-
+        EVP_CIPHER_CTX_init(&ctx);
+        EVP_CipherInit_ex(&ctx, algo->cipher_fun(), NULL, NULL, NULL, encrypt);
+        EVP_CIPHER_CTX_set_key_length(&ctx, keybits);
+        EVP_CipherInit_ex(&ctx, NULL, NULL, keydata, iv, encrypt);
+#else
+	EVP_CIPHER_CTX *ctx;
+        ctx = EVP_CIPHER_CTX_new();
+        if (!ctx) {
+            nyx_debug("Out of memory: EVP_CIPHER_CTX");
+            return NYX_ERROR_OUT_OF_MEMORY;
+        }
+	EVP_CIPHER_CTX_init(ctx);
+	EVP_CipherInit_ex(ctx, algo->cipher_fun(), NULL, NULL, NULL, encrypt);
+	EVP_CIPHER_CTX_set_key_length(ctx, keybits);
+	EVP_CipherInit_ex(ctx, NULL, NULL, keydata, iv, encrypt);
+#endif
 	if (mode != NYX_SECURITY_MODE_CFB)
 	{
 		int pad = padding == NYX_SECURITY_PADDING_PKCS5 ? 1 : 0;
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 		if (!EVP_CIPHER_CTX_set_padding(&ctx, pad))
+#else
+		if (!EVP_CIPHER_CTX_set_padding(ctx, pad))
+#endif
 		{
 			result = NYX_ERROR_GENERIC;
 			goto out;
 		}
 	}
-
-	if (!EVP_CipherUpdate(&ctx, dest, destlen,
-	                      src, srclen))
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+	if (!EVP_CipherUpdate(&ctx, dest, destlen,src, srclen))
+#else
+	if (!EVP_CipherUpdate(ctx, dest, destlen,src, srclen))
+#endif
 	{
 		nyx_debug("EVP_CipherUpdate failed");
 		ERR_print_errors_fp(stderr);
@@ -148,12 +164,19 @@ nyx_error_t aes_crypt(const unsigned char *keydata, int keybits, int encrypt,
 	if (nextIvLen == AES_BLOCK_SIZE && padding == NYX_SECURITY_PADDING_NONE &&
 	        mode != NYX_SECURITY_MODE_ECB)
 	{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 		memcpy(nextIv, &ctx.iv, AES_BLOCK_SIZE);
+#else
+		EVP_CipherInit_ex(ctx, NULL, NULL, keydata, nextIv, encrypt);
+#endif
 	}
 
 	int tmplen;
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	if (!EVP_CipherFinal_ex(&ctx, dest + *destlen, &tmplen))
+#else
+	if (!EVP_CipherFinal_ex(ctx, dest + *destlen, &tmplen))
+#endif
 	{
 		nyx_debug("EVP_CipherFinal_ex failed");
 		ERR_print_errors_fp(stderr);
@@ -164,7 +187,12 @@ nyx_error_t aes_crypt(const unsigned char *keydata, int keybits, int encrypt,
 	*destlen += tmplen;
 
 out:
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	EVP_CIPHER_CTX_cleanup(&ctx);
+#else
+	EVP_CIPHER_CTX_reset(ctx);
+        EVP_CIPHER_CTX_free(ctx);
+#endif
 	return result;
 }
 

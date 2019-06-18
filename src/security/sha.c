@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2019 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -56,13 +56,24 @@ nyx_error_t sha_init(const char *name)
 
 	if (running_mdctx != NULL)
 	{
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 		EVP_MD_CTX_cleanup(running_mdctx);
-		EVP_MD_CTX_destroy(running_mdctx);
+                EVP_MD_CTX_destroy(running_mdctx);
+#else
+		EVP_MD_CTX_reset(running_mdctx);
+		EVP_MD_CTX_free(running_mdctx);
+#endif
 	}
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	running_mdctx = EVP_MD_CTX_create();
-	EVP_MD_CTX_init(running_mdctx);
-
+        EVP_MD_CTX_init(running_mdctx);
+#else
+	running_mdctx = EVP_MD_CTX_new();
+        if (!running_mdctx) {
+            nyx_debug("Out of memory: EVP_MD_CTX");
+            return NYX_ERROR_OUT_OF_MEMORY;
+        }
+#endif
 	if (EVP_DigestInit_ex(running_mdctx, algo->md(), NULL) != 1)
 	{
 		return NYX_ERROR_GENERIC;
@@ -98,12 +109,14 @@ nyx_error_t sha_finalize(char *dest, int *destlen)
 	{
 		return NYX_ERROR_GENERIC;
 	}
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	EVP_MD_CTX_cleanup(running_mdctx);
-	EVP_MD_CTX_destroy(running_mdctx);
-
+        EVP_MD_CTX_destroy(running_mdctx);
+#else
+        EVP_MD_CTX_reset(running_mdctx);
+        EVP_MD_CTX_free(running_mdctx);
+#endif
 	running_mdctx = NULL;
 
 	return NYX_ERROR_NONE;
 }
-

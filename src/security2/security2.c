@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2018 LG Electronics, Inc.
+// Copyright (c) 2016-2019 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -154,8 +154,9 @@ nyx_error_t nyx_module_open(nyx_instance_t i, nyx_device_t **d)
 	OpenSSL_add_all_algorithms();
 	ERR_load_BIO_strings();
 	ERR_load_crypto_strings();
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	OPENSSL_config(NULL);
-
+#endif
 	CRYPTO_set_id_callback(pthreads_thread_id_callback);
 
 

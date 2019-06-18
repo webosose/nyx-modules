@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2019 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -141,15 +141,30 @@ nyx_error_t aes_crypt(int index, int encrypt,
 		src += *ivlen;
 		srclen -= *ivlen;
 	}
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	EVP_CIPHER_CTX ctx;
-	EVP_CIPHER_CTX_init(&ctx);
-	EVP_CipherInit_ex(&ctx, algo->cipher_fun(), NULL, NULL, NULL, encrypt);
-	EVP_CIPHER_CTX_set_key_length(&ctx, aes_key->keylen);
-	EVP_CipherInit_ex(&ctx, NULL, NULL, aes_key->key, iv, encrypt);
+        EVP_CIPHER_CTX_init(&ctx);
+        EVP_CipherInit_ex(&ctx, algo->cipher_fun(), NULL, NULL, NULL, encrypt);
+        EVP_CIPHER_CTX_set_key_length(&ctx, aes_key->keylen);
+        EVP_CipherInit_ex(&ctx, NULL, NULL, aes_key->key, iv, encrypt);
 
-	if (!EVP_CipherUpdate(&ctx, (unsigned char *)dest, destlen,
+        if (!EVP_CipherUpdate(&ctx, (unsigned char *)dest, destlen,
+                              (unsigned char *)src, srclen))
+#else
+	EVP_CIPHER_CTX *ctx;
+        ctx = EVP_CIPHER_CTX_new();
+        if (!ctx) {
+            nyx_debug("Out of memory: EVP_CIPHER_CTX");
+            return NYX_ERROR_OUT_OF_MEMORY;
+        }
+	EVP_CIPHER_CTX_init(ctx);
+	EVP_CipherInit_ex(ctx, algo->cipher_fun(), NULL, NULL, NULL, encrypt);
+	EVP_CIPHER_CTX_set_key_length(ctx, aes_key->keylen);
+	EVP_CipherInit_ex(ctx, NULL, NULL, aes_key->key, iv, encrypt);
+
+	if (!EVP_CipherUpdate(ctx, (unsigned char *)dest, destlen,
 	                      (unsigned char *)src, srclen))
+#endif
 	{
 		nyx_debug("EVP_CipherUpdate failed");
 		ERR_print_errors_fp(stderr);
@@ -158,8 +173,11 @@ nyx_error_t aes_crypt(int index, int encrypt,
 	}
 
 	int tmplen;
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	if (!EVP_CipherFinal_ex(&ctx, (unsigned char *)dest + *destlen, &tmplen))
+#else
+	if (!EVP_CipherFinal_ex(ctx, (unsigned char *)dest + *destlen, &tmplen))
+#endif
 	{
 		nyx_debug("EVP_CipherFinal_ex failed");
 		ERR_print_errors_fp(stderr);
@@ -175,7 +193,12 @@ nyx_error_t aes_crypt(int index, int encrypt,
 	}
 
 out:
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	EVP_CIPHER_CTX_cleanup(&ctx);
+#else
+	EVP_CIPHER_CTX_reset(ctx);
+        EVP_CIPHER_CTX_free(ctx);
+#endif
 	return result;
 }
 
