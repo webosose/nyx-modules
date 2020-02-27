@@ -1,4 +1,4 @@
-# Copyright (c) 2010-2018 LG Electronics, Inc.
+# Copyright (c) 2010-2020 LG Electronics, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,5 +32,5 @@ webos_add_compiler_flags(ALL ${PMLOG_CFLAGS_OTHER})
 
 include_directories(include/internal)
 
-webos_nyx_module_provider(OW BATTERY CHARGER DEVICEINFO OSINFO SYSTEM DISPLAY SECURITY SECURITY2)
+webos_nyx_module_provider(OW BATTERY CHARGER DEVICEINFO OSINFO SYSTEM DISPLAY SECURITY SECURITY2 GPS)
 add_subdirectory(src)

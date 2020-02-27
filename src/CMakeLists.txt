@@ -1,4 +1,4 @@
-# Copyright (c) 2010-2018 LG Electronics, Inc.
+# Copyright (c) 2010-2020 LG Electronics, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -81,4 +81,8 @@ endif()
 if(NYXMOD_OW_OSINFO)
 #    set(ENCRYPTION_KEY_TYPE "" CACHE STRING "Encryption key type")
     add_subdirectory(os_info)
+endif()
+
+if(NYXMOD_OW_GPS)
+    add_subdirectory(gps)
 endif()
