@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2018 LG Electronics, Inc.
+// Copyright (c) 2016-2020 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,6 +53,7 @@
 #define MSGID_NYX_MOD_MEMINFO_OPEN_ERR                                      "NYXDEV_MEMINFO_OPEN_ERR"
 #define MSGID_NYX_MOD_STORAGE_ERR                                           "NYXDEV_STORAGE_ERR"
 #define MSGID_NYX_MOD_DEV_INFO_OPEN_ERR                                     "NYXDEV_INFO_OPEN_ERR"
+#define MSGID_NYX_MOD_DEVICEID_OPEN_ERR                                     "NYXDEV_DEVICEID_OPEN_ERR"
 
 /*Display lib open*/
 #define MSGID_NYX_MOD_DISP_OPEN_ALREADY_ERR                                 "NYXDIS_OPEN_ALREADY_ERR"

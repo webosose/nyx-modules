@@ -47,6 +47,7 @@ typedef struct
 	const char *wifi_mac;
 	const char *wired_mac;
 	const char *bdaddr;
+	const char *devuid_str;
 } device_info_device_t;
 
 static const unsigned int  NDUID_LEN = SHA_DIGEST_LENGTH *
@@ -61,6 +62,9 @@ static const char *const  read_wifi_mac =
 
 static const char *const  read_bdaddr =
     "hcitool dev 2>&1 | awk '/hci0/ {print $2}'";
+
+static const char *const  DEVUID_PATH =
+               "/sys/devices/soc0/serial_number";
 
 NYX_DECLARE_MODULE(NYX_DEVICE_DEVICE_INFO, "DeviceInfo");
 
@@ -239,6 +243,58 @@ static nyx_error_t get_device_nduid(char nduid[NDUID_LEN + 1])
 	return NYX_ERROR_NONE;
 }
 
+static nyx_error_t get_device_unique_id(char ** target)
+{
+	nyx_error_t error = NYX_ERROR_NONE;
+
+	if (NULL != *target)
+	{
+		free(*target);
+		*target = NULL;
+	}
+
+	FILE *fp = fopen(DEVUID_PATH, "r");
+
+	if (!fp)
+	{
+		nyx_error(MSGID_NYX_MOD_DEVICEID_OPEN_ERR,0,"Error in Opening File : %s",DEVUID_PATH);
+		error = NYX_ERROR_NOT_FOUND;
+		goto error;
+	}
+
+	size_t temp_size = 0;
+
+	// when delim is set to 'EOF' getdelim supports multiple lines
+	ssize_t read_count = getdelim(target, &temp_size, EOF, fp);
+
+	if (-1 == read_count)
+	{
+		if (*target)
+		{
+			free(*target);
+			*target = NULL;
+		}
+		error = NYX_ERROR_NOT_FOUND;
+		goto error;
+	}
+	else
+	{
+		// remove unnecessary extra endline character
+		if (read_count > 0 && (*target)[read_count - 1] == '\n')
+		{
+			(*target)[read_count - 1] = '\0';
+		}
+	}
+
+error:
+	if (fp)
+	{
+		fclose(fp);
+	}
+
+	return error;
+}
+
 /*
 * Input parameters:
 * command - command line command to execute
@@ -343,6 +399,7 @@ nyx_error_t nyx_module_open(nyx_instance_t i, nyx_device_t **d)
 	device->wifi_mac = NULL;
 	device->wired_mac = NULL;
 	device->bdaddr = NULL;
+	device->devuid_str = NULL;
 
 	*d = (nyx_device_t *)device;
 	return error;
@@ -380,6 +437,12 @@ nyx_error_t nyx_module_close(nyx_device_handle_t d)
 	{
 		free((void *) device_info->bdaddr);
 		device_info->bdaddr = NULL;
+	}
+
+	if (NULL != device_info->devuid_str)
+	{
+		free((void *) device_info->devuid_str);
+		device_info->devuid_str = NULL;
 	}
 
 	free((void *) device_info->nduid_str);
@@ -490,6 +553,15 @@ nyx_error_t device_info_query(nyx_device_handle_t d,
 
 		case NYX_DEVICE_INFO_NDUID:
 			*dest = dev->nduid_str;
+			break;
+
+		case NYX_DEVICE_INFO_DEVICE_ID:
+			error = get_device_unique_id((char **)&dev->devuid_str);
+
+			if (NYX_ERROR_NONE == error)
+			{
+				*dest = dev->devuid_str;
+			}
 			break;
 
 		default:
