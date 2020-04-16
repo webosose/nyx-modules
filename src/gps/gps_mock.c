@@ -19,16 +19,20 @@
 /*
 *******************************************************************/
 
+#include <stdlib.h>
+#include <string.h>
+
 #include <nyx/nyx_module.h>
 #include <nyx/module/nyx_utils.h>
 
+#include "parser_interface.h"
 
 NYX_DECLARE_MODULE(NYX_DEVICE_GPS, "GpsMock");
 
 typedef struct methodStringPair
 {
-	module_method_t mType;
-	const char * mString;
+    module_method_t mType;
+    const char * mString;
 } methodStringPair_t;
 
 static const methodStringPair_t mapMethodString[] = {
@@ -71,9 +75,190 @@ nyx_gps_ni_callbacks_t          *nyx_gps_ni_cbs = NULL;
 nyx_agps_ril_callbacks_t        *nyx_agps_ril_cbs = NULL;
 nyx_gps_geofence_callbacks_t    *nyx_gps_geofence_cbs = NULL;
 
+static const GpsInterface               *pGpsInterface = NULL;
+
+// Lazy instantiation of data structure for callbacks
+nyx_gps_location_t          *nyx_gps_location = NULL;
+nyx_gps_status_t            *nyx_gps_status = NULL;
+nyx_gps_sv_status_t         *nyx_gps_sv_status = NULL;
+
+char                        *nmea_sentence = NULL;
+int                         nmea_length = 0;
+
+void gps_location_cb(GpsLocation* location)
+{
+    if (nyx_gps_cbs == NULL || nyx_gps_cbs->location_cb == NULL)
+        return;
+
+    if (nyx_gps_location == NULL)
+        nyx_gps_location = (nyx_gps_location_t *)malloc(sizeof(nyx_gps_location_t));
+
+    if (nyx_gps_location && location) {
+        memset(nyx_gps_location, 0, sizeof(nyx_gps_location_t));
+        nyx_gps_location->size = sizeof(nyx_gps_location_t);
+        nyx_gps_location->flags = (nyx_gps_location_flags_t)location->flags;
+        nyx_gps_location->latitude = location->latitude;
+        nyx_gps_location->longitude = location->longitude;
+        nyx_gps_location->altitude = location->altitude;
+        nyx_gps_location->speed = location->speed;
+        nyx_gps_location->bearing = location->bearing;
+        nyx_gps_location->accuracy = location->accuracy;
+        nyx_gps_location->timestamp = (int64_t)location->timestamp;
+    }
+
+    (* (nyx_gps_cbs->location_cb))(nyx_gps_location, nyx_gps_cbs->user_data);
+}
+
+void gps_status_cb(GpsStatus* status)
+{
+    if (nyx_gps_cbs == NULL || nyx_gps_cbs->status_cb == NULL)
+        return;
+
+    if (nyx_gps_status == NULL)
+        nyx_gps_status = (nyx_gps_status_t *)malloc(sizeof(nyx_gps_status_t));
+
+    if (nyx_gps_status && status) {
+        memset(nyx_gps_status, 0, sizeof(nyx_gps_status_t));
+        nyx_gps_status->size = sizeof(nyx_gps_status_t);
+        nyx_gps_status->status = (nyx_gps_status_value_t)status->status;
+    }
+
+    (* (nyx_gps_cbs->status_cb))(nyx_gps_status, nyx_gps_cbs->user_data);
+}
+
+void gps_sv_status_cb(GpsSvStatus* sv_info)
+{
+    int i;
+
+    if (nyx_gps_cbs == NULL || nyx_gps_cbs->sv_status_cb == NULL)
+        return;
+
+    if (nyx_gps_sv_status == NULL)
+        nyx_gps_sv_status = (nyx_gps_sv_status_t *)malloc(sizeof(nyx_gps_sv_status_t));
+
+    if (nyx_gps_sv_status && sv_info) {
+        memset(nyx_gps_sv_status, 0, sizeof(nyx_gps_sv_status_t));
+        nyx_gps_sv_status->size = sizeof(nyx_gps_sv_status_t);
+        nyx_gps_sv_status->num_svs = sv_info->num_svs;
+        for (i = 0; i < sv_info->num_svs; i++) {
+            nyx_gps_sv_status->sv_list[i].size = sizeof(nyx_gps_sv_info_t);
+            nyx_gps_sv_status->sv_list[i].prn = sv_info->sv_list[i].prn;
+            nyx_gps_sv_status->sv_list[i].snr = sv_info->sv_list[i].snr;
+            nyx_gps_sv_status->sv_list[i].elevation = sv_info->sv_list[i].elevation;
+            nyx_gps_sv_status->sv_list[i].azimuth = sv_info->sv_list[i].azimuth;
+        }
+        nyx_gps_sv_status->ephemeris_mask = sv_info->ephemeris_mask;
+        nyx_gps_sv_status->almanac_mask = sv_info->almanac_mask;
+        nyx_gps_sv_status->used_in_fix_mask = sv_info->used_in_fix_mask;
+    }
+
+    (* (nyx_gps_cbs->sv_status_cb))(nyx_gps_sv_status, nyx_gps_cbs->user_data);
+}
+
+void gps_nmea_cb(GpsUtcTime timestamp, const char* nmea, int length)
+{
+    if (nyx_gps_cbs == NULL || nyx_gps_cbs->nmea_cb == NULL)
+        return;
+
+    if (nmea_length < length)
+        nmea_sentence = (char *)realloc(nmea_sentence, length + 1);
+
+    if (nmea_sentence && nmea) {
+        memset(nmea_sentence, 0, length + 1);
+        memcpy(nmea_sentence, nmea, length);
+        nmea_length = length;
+    }
+
+    (* (nyx_gps_cbs->nmea_cb))((int64_t)timestamp, nmea_sentence, nmea_length, nyx_gps_cbs->user_data);
+}
+
+void gps_set_capabilities_cb(uint32_t capabilities)
+{
+    if (nyx_gps_cbs == NULL || nyx_gps_cbs->set_capabilities_cb == NULL)
+        return;
+
+    (* (nyx_gps_cbs->set_capabilities_cb))(capabilities, nyx_gps_cbs->user_data);
+}
+
+void gps_acquire_wakelock_cb()
+{
+    if (nyx_gps_cbs == NULL || nyx_gps_cbs->acquire_wakelock_cb == NULL)
+        return;
+
+    (* (nyx_gps_cbs->acquire_wakelock_cb))(nyx_gps_cbs->user_data);
+}
+
+void gps_release_wakelock_cb()
+{
+    if (nyx_gps_cbs == NULL || nyx_gps_cbs->release_wakelock_cb == NULL)
+        return;
+
+    (* (nyx_gps_cbs->release_wakelock_cb))(nyx_gps_cbs->user_data);
+}
+
+void gps_request_utc_time_cb()
+{
+    if (nyx_gps_cbs == NULL || nyx_gps_cbs->request_utc_time_cb == NULL)
+        return;
+
+    (* (nyx_gps_cbs->request_utc_time_cb))(nyx_gps_cbs->user_data);
+}
+
+/*  to get over the fact tha Pthread needs a function returning void * */
+/*  but Android gps.h declares a fn which returns just a void. */
+typedef void (*ThreadStart) (void *);
+typedef struct {
+    ThreadStart pfnThreadStart;
+    void *arg;
+} tcreatorData;
+
+void *my_thread_fn(void *tcd)
+{
+    tcreatorData* local_tcd = (tcreatorData *)tcd;
+    if (local_tcd != NULL) {
+        local_tcd->pfnThreadStart(local_tcd->arg);
+        free(local_tcd);
+    }
+
+    return NULL;
+}
+
+pthread_t gps_create_thread_cb(const char* name, void (*start)(void *), void* arg)
+{
+    pthread_t thread_id = -1;
+
+    tcreatorData* tcd = (tcreatorData*)malloc(sizeof(tcreatorData));
+
+    if (tcd != NULL) {
+        tcd->pfnThreadStart = start;
+        tcd->arg = arg;
+
+        if (pthread_create(&thread_id, NULL, my_thread_fn, (void*)tcd) != 0) {
+            nyx_debug("Failed to create gps thread");
+            free(tcd);
+        } else {
+            nyx_debug("Succeeded to create gps thread");
+        }
+    }
+
+    return thread_id;
+}
+
+GpsCallbacks sGpsCallbacks = {
+    sizeof(GpsCallbacks),
+    gps_location_cb,
+    gps_status_cb,
+    gps_sv_status_cb,
+    gps_nmea_cb,
+    gps_set_capabilities_cb,
+    gps_acquire_wakelock_cb,
+    gps_release_wakelock_cb,
+    gps_create_thread_cb,
+    gps_request_utc_time_cb
+};
+
 nyx_error_t nyx_module_open(nyx_instance_t instance, nyx_device_t **device_ptr)
 {
-    char nyx_gps_module_path[256];
     int cnt, arraySize;
     nyx_error_t error = NYX_ERROR_INCOMPATIBLE_LIBRARY;
 
@@ -90,6 +275,15 @@ nyx_error_t nyx_module_open(nyx_instance_t instance, nyx_device_t **device_ptr)
         error = NYX_ERROR_OUT_OF_MEMORY;
         goto ERROR_HANDLER;
     }
+
+    pGpsInterface = get_gps_interface();
+    if (pGpsInterface == NULL) {
+        nyx_error("MSGID_NMEA_PARSER", 0, "Failed to get GPS NMEA Parser interface");
+        error = NYX_ERROR_DEVICE_UNAVAILABLE;
+        goto ERROR_HANDLER;
+    }
+
+    nyx_debug("Succeeded to get GPS NMEA parser interface");
 
     if ((error = nyx_module_set_description(instance, nyx_dev, "Module to drive the Qualcomm GPS")) != NYX_ERROR_NONE) {
         nyx_error("MSGID_NYX_MOD_GPS_SET_DESCRIBE_ERR", 0, "Failed to set GPS nyx module description");
@@ -123,6 +317,9 @@ nyx_error_t nyx_module_open(nyx_instance_t instance, nyx_device_t **device_ptr)
     return NYX_ERROR_NONE;
 
 ERROR_HANDLER:
+    if (pGpsInterface) {
+        pGpsInterface = NULL;
+    }
 
     if (nyx_dev) {
         free(nyx_dev);
@@ -134,6 +331,37 @@ ERROR_HANDLER:
 
 nyx_error_t nyx_module_close(nyx_device_t *device)
 {
+   if (device == NULL || device != nyx_dev)
+        return NYX_ERROR_INVALID_VALUE;
+
+    if (nyx_gps_location != NULL) {
+        free(nyx_gps_location);
+        nyx_gps_location = NULL;
+    }
+
+    if (nyx_gps_status != NULL) {
+        free(nyx_gps_status);
+        nyx_gps_status = NULL;
+    }
+
+    if (nyx_gps_sv_status != NULL) {
+        free(nyx_gps_sv_status);
+        nyx_gps_sv_status = NULL;
+    }
+
+    if (nmea_sentence != NULL) {
+        free(nmea_sentence);
+        nmea_sentence = NULL;
+        nmea_length = 0;
+    }
+
+    if (pGpsInterface) {
+        pGpsInterface = NULL;
+    }
+
+    free(device);
+    nyx_dev = NULL;
+
     return NYX_ERROR_NONE;
 }
 
@@ -160,21 +388,53 @@ nyx_error_t init(nyx_device_handle_t handle,
     nyx_agps_ril_cbs = agps_ril_cbs;
     nyx_gps_geofence_cbs = geofence_cbs;
 
+    if (pGpsInterface != NULL && pGpsInterface->init(&sGpsCallbacks) != 0)
+        nyx_error("MSGID_NMEA_PARSER", 0, "Failed to initialize gps interface");
+
     return NYX_ERROR_NONE;
 }
 
 nyx_error_t start(nyx_device_handle_t handle)
 {
+    if (nyx_dev == NULL)
+        return NYX_ERROR_DEVICE_NOT_EXIST;
+
+    if (handle != nyx_dev)
+        return NYX_ERROR_INVALID_HANDLE;
+
+    if (!pGpsInterface || pGpsInterface->start() != 0)
+        return NYX_ERROR_DEVICE_UNAVAILABLE;
+
     return NYX_ERROR_NONE;
 }
 
 nyx_error_t stop(nyx_device_handle_t handle)
 {
+    if (nyx_dev == NULL)
+        return NYX_ERROR_DEVICE_NOT_EXIST;
+
+    if (handle != nyx_dev)
+        return  NYX_ERROR_INVALID_HANDLE;
+
+    if (!pGpsInterface || pGpsInterface->stop() != 0)
+        return NYX_ERROR_DEVICE_UNAVAILABLE;
+
     return NYX_ERROR_NONE;
 }
 
 nyx_error_t cleanup(nyx_device_handle_t handle)
 {
+    if (nyx_dev == NULL)
+        return NYX_ERROR_DEVICE_NOT_EXIST;
+
+    if (handle != nyx_dev)
+        return NYX_ERROR_INVALID_HANDLE;
+
+    if (!pGpsInterface)
+        return NYX_ERROR_DEVICE_UNAVAILABLE;
+
+    pGpsInterface->cleanup();
+
     return NYX_ERROR_NONE;
 }
 

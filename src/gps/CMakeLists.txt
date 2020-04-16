@@ -16,6 +16,10 @@
 #
 # LICENSE@@@
 
+pkg_check_modules(NMEAPARSER REQUIRED nmeaparser)
+include_directories(${NMEAPARSER_INCLUDE_DIRS})
+webos_add_compiler_flags(ALL ${NMEAPARSER_CFLAGS_OTHER})
+
 webos_build_nyx_module(GpsMock
-                       SOURCES gps_mock.c
-                       LIBRARIES ${MODULE_LIBRARIES} ${PMLOG_LDFLAGS} ${NYXLIB_LDFLAGS} -lrt -lpthread)
+                       SOURCES gps_mock.c parser_interface.cpp parser_nmea.cpp
+                       LIBRARIES ${MODULE_LIBRARIES} ${PMLOG_LDFLAGS} ${NYXLIB_LDFLAGS} ${NMEAPARSER_LDFLAGS} -lrt -lpthread -lNMEAParserLib)
