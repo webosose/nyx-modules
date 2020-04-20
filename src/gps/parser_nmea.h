@@ -22,17 +22,25 @@
 #ifndef _PARSER_NMEA_H_
 #define _PARSER_NMEA_H_
 
-#include <string>
-#include <nyx/module/nyx_log.h>
-#include "parser_interface.h"
+#include <nmeaparser/NMEAParser.h>
 
-class ParserNmea : public ParserInterface {
+class ParserNmea : public CNMEAParser {
 public:
-    ParserNmea(const std::string& nmea_file_path);
-    ~ParserNmea();
+
+    static ParserNmea* getInstance();
 
     bool startParsing();
     bool stopParsing();
+
+private:
+    FILE *fp;
+    bool stopParser;
+
+    ParserNmea();
+    ~ParserNmea();
+
+    virtual CNMEAParserData::ERROR_E ProcessRxCommand(char *pCmd, char *pData);
+    virtual void OnError(CNMEAParserData::ERROR_E nError, char *pCmd);
 };
 
-#endif // end _PARSER_NMEA_H_
+#endif // _PARSER_NMEA_H_
