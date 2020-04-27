@@ -43,13 +43,15 @@ private:
     ParserNmea();
     ~ParserNmea();
 
-    virtual CNMEAParserData::ERROR_E ProcessRxCommand(char *pCmd, char *pData);
+    virtual CNMEAParserData::ERROR_E ProcessRxCommand(char *pCmd, char *pData, char *checksum);
     virtual void OnError(CNMEAParserData::ERROR_E nError, char *pCmd);
 
-    bool SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T& rmcData);
-    bool SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T& gsaData);
-    bool SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T& gsvData);
-    bool SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData);
+    bool SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T& rmcData, char *nmea_data);
+    bool SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T& gsaData, char *nmea_data);
+    bool SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T& gsvData, char *nmea_data);
+    bool SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData, char *nmea_data);
+    bool SetGpsNmea_Data(const char *buff);
 };
 
-#endif // _PARSER_NMEA_H_
+void SetGpsStatus(int status);
+#endif // end _PARSER_NMEA_H_

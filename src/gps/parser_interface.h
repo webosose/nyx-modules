@@ -112,8 +112,10 @@ typedef struct {
 
 const GpsInterface* get_gps_interface();
 
-void nmea_loc_cb(GpsLocation* location, void* locExt);
-void nmea_sv_cb(GpsSvStatus* sv_status, void* svExt);
+void parser_loc_cb(GpsLocation* location, void* locExt);
+void parser_sv_cb(GpsSvStatus* sv_status, void* svExt);
+void parser_status_cb(GpsStatus* gps_status, void* statusExt);
+void parser_nmea_cb(GpsUtcTime now, const char *buff, int len);
 
 #ifdef __cplusplus
 }

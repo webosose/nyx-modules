@@ -32,21 +32,21 @@
 #include "parser_interface.h"
 #include "gps_storage.h"
 
-bool ParserNmea::SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData) {
+bool ParserNmea::SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData, char *nmea_data) {
     GpsLocation location;
     memset(&location, 0, sizeof(GpsLocation));
 
     location.latitude = ggaData.m_dLatitude;
     location.longitude = ggaData.m_dLongitude;
     location.altitude = ggaData.m_dAltitudeMSL;
-    location.speed = ggaData.m_dVertSpeed;
+    //location.speed = ggaData.m_dVertSpeed;
     location.bearing = ggaData.m_dHDOP;
 
     struct timeval tval;
     gettimeofday(&tval, (struct timezone *) NULL);
     location.timestamp = tval.tv_sec * 1000LL + tval.tv_usec/1000;
 
-    //nmea_loc_cb(&location, nullptr);
+    parser_loc_cb(&location, nullptr);
 
     nyx_debug("GPGGA Parsed!\n");
     nyx_debug("   Time:                %02d:%02d:%02d\n", ggaData.m_nHour, ggaData.m_nMinute, ggaData.m_nSecond);
@@ -61,11 +61,14 @@ bool ParserNmea::SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData) {
     nyx_debug("   Geoidal Separation:  %f\n", ggaData.m_dGeoidalSep);
     nyx_debug("   Vertical Speed:      %.02f\n", ggaData.m_dVertSpeed);
 
+    SetGpsNmea_Data(nmea_data);
     return CNMEAParserData::ERROR_OK;
 }
 
-bool ParserNmea::SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T& gsvData) {
+bool ParserNmea::SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T& gsvData, char *nmea_data) {
     GpsSvStatus sv_status;
+    memset(&sv_status, 0, sizeof(GpsSvStatus));
+
     sv_status.num_svs = gsvData.nSatsInView;
     for(auto i = 0; i < sv_status.num_svs; i++)
     {
@@ -81,11 +84,12 @@ bool ParserNmea::SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T& gsvData) {
         nyx_debug("    GPS azimuth: %f\n", gsvData.SatInfo[i].dAzimuth);
     }
 
-    nmea_sv_cb(&sv_status, nullptr);
+    parser_sv_cb(&sv_status, nullptr);
+    SetGpsNmea_Data(nmea_data);
     return CNMEAParserData::ERROR_OK;
 }
 
-bool ParserNmea::SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T& gsaData) {
+bool ParserNmea::SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T& gsaData, char *nmea_data) {
     nyx_debug("    nAutoMode: %d\n", gsaData.nAutoMode);
     nyx_debug("    nMode: %d\n", gsaData.nMode);
     nyx_debug("    GPS dPDOP: %f\n", gsaData.dPDOP);
@@ -93,10 +97,12 @@ bool ParserNmea::SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T& gsaData) {
     nyx_debug("    GPS dVDOP: %f\n", gsaData.dVDOP);
     nyx_debug("    GPS uGGACount: %u\n", gsaData.uGGACount);
 
+    SetGpsNmea_Data(nmea_data);
+
     return CNMEAParserData::ERROR_OK;
 }
 
-bool ParserNmea::SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T& rmcData) {
+bool ParserNmea::SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T& rmcData, char *nmea_data) {
     nyx_debug("GPRMC Parsed!\n");
     nyx_debug("   m_timeGGA:            %ld\n", rmcData.m_timeGGA);
     nyx_debug("   Time:                %02d:%02d:%02d\n", rmcData.m_nHour, rmcData.m_nMinute, rmcData.m_nSecond);
@@ -112,10 +118,10 @@ bool ParserNmea::SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T& rmcData) {
     nyx_debug("   m_nYear :     %d\n", rmcData.m_nYear);
     nyx_debug("   m_dMagneticVariation:    %f\n", rmcData.m_dMagneticVariation);
 
-    struct tm timeStamp = {rmcData.m_nSecond, rmcData.m_nMinute, rmcData.m_nHour,
+/*    struct tm timeStamp = {rmcData.m_nSecond, rmcData.m_nMinute, rmcData.m_nHour,
                                                 rmcData.m_nDay, rmcData.m_nMonth, (rmcData.m_nYear-1900)};
     nyx_debug("   timeStamp:    %ld\n", ((mktime(&timeStamp)+(long)(rmcData.m_dSecond*1000))*1000));
-
+*/
     GpsLocation location;
     memset(&location, 0, sizeof(GpsLocation));
 
@@ -123,45 +129,73 @@ bool ParserNmea::SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T& rmcData) {
     location.longitude = rmcData.m_dLongitude;
     location.altitude = rmcData.m_dAltitudeMSL;
     location.speed = rmcData.m_dSpeedKnots*0.514;
-    location.timestamp = ((mktime(&timeStamp)+(long)(rmcData.m_dSecond*1000))*1000);
+    //location.timestamp = ((mktime(&timeStamp)+(long)(rmcData.m_dSecond*1000))*1000);
+    struct timeval tval;
+    gettimeofday(&tval, (struct timezone *) NULL);
+    location.timestamp = tval.tv_sec * 1000LL + tval.tv_usec/1000;
 
-    nmea_loc_cb(&location, nullptr);
+    parser_loc_cb(&location, nullptr);
+    SetGpsNmea_Data(nmea_data);
 
     return CNMEAParserData::ERROR_OK;
 }
 
-CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData) {
+bool ParserNmea::SetGpsNmea_Data(const char *buff)
+{
+    if (!buff)
+        return CNMEAParserData::ERROR_OK;
+
+    GpsUtcTime now;
+    struct timeval tval;
+    gettimeofday(&tval, (struct timezone *) NULL);
+    now = tval.tv_sec * 1000LL + tval.tv_usec / 1000;
+    parser_nmea_cb(now, buff, (int)strlen(buff));
+    return CNMEAParserData::ERROR_OK;
+}
+
+void SetGpsStatus(int status)
+{
+    GpsStatus gps_status;
+    memset(&gps_status, 0, sizeof(GpsStatus));
+    gps_status.status = status;
+    parser_status_cb(&gps_status, nullptr);
+}
+
+CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, char *checksum) {
     // Call base class to process the command
     CNMEAParser::ProcessRxCommand(pCmd, pData);
 
-    nyx_debug("Cmd: %s\nData: %s\n", pCmd, pData);
+    nyx_debug("Cmd: %s\nData: %s, checksum:%.2s\n", pCmd, pData, checksum);
+    char *nmea_data = NULL;
+    int len = strlen(pCmd) + strlen(pData) + 7;
+    nmea_data = (char *)malloc(len);
+    snprintf(nmea_data, len, "$%.5s,%s*%.2s", pCmd, pData, checksum);
 
     // Check if this is the GPGGA command. If it is, then set gps location
     if (strstr(pCmd, "GPGGA") != NULL) {
-        /*
 	CNMEAParserData::GGA_DATA_T* ggaData =  (CNMEAParserData::GGA_DATA_T*)malloc(sizeof(CNMEAParserData::GGA_DATA_T));
         if (GetGPGGA(*ggaData) == CNMEAParserData::ERROR_OK) {
             parserThreadPoolObj->enqueue([=](){
-                SetGpsGGA_Data(*ggaData);
+                SetGpsGGA_Data(*ggaData, nmea_data);
+                free(nmea_data);
             });
         }
-        */
     }
     else if (strstr(pCmd, "GPGSV") != NULL) { //GPS GSV Data
-        /*
         CNMEAParserData::GSV_DATA_T* gsvData = (CNMEAParserData::GSV_DATA_T*)malloc(sizeof(CNMEAParserData::GSV_DATA_T));
         if (GetGPGSV(*gsvData) == CNMEAParserData::ERROR_OK) {
             parserThreadPoolObj->enqueue([=](){
-                SetGpsGSV_Data(*gsvData);
+                SetGpsGSV_Data(*gsvData, nmea_data);
+                free(nmea_data);
             });
          }
-        */
     }
     else if (strstr(pCmd, "GPGSA") != NULL) {
         CNMEAParserData::GSA_DATA_T* gsaData = (CNMEAParserData::GSA_DATA_T*)malloc(sizeof(CNMEAParserData::GSA_DATA_T));
         if (GetGPGSA(*gsaData) == CNMEAParserData::ERROR_OK) {
             parserThreadPoolObj->enqueue([=](){
-                SetGpsGSA_Data(*gsaData);
+                SetGpsGSA_Data(*gsaData, nmea_data);
+                free(nmea_data);
             });
          }
     }
@@ -169,9 +203,14 @@ CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData) {
         CNMEAParserData::RMC_DATA_T* rmcData = (CNMEAParserData::RMC_DATA_T*)malloc(sizeof(CNMEAParserData::RMC_DATA_T));
         if(GetGPRMC(*rmcData) == CNMEAParserData::ERROR_OK) {
             parserThreadPoolObj->enqueue([=](){
-                SetGpsRMC_Data(*rmcData);
+                SetGpsRMC_Data(*rmcData, nmea_data);
+                free(nmea_data);
             });
          }
+    }
+    else {
+        if (nmea_data)
+            free(nmea_data);
     }
 
     return CNMEAParserData::ERROR_OK;
@@ -209,6 +248,8 @@ bool ParserNmea::startParsing() {
         return false;
     }
 
+    SetGpsStatus(NYX_GPS_STATUS_SESSION_BEGIN);
+
     GKeyFile *keyfile = gps_config_load_file();
     if (!keyfile) {
         nyx_error("MSGID_NMEA_PARSER", 0, "mock config file not available \n");
@@ -241,6 +282,7 @@ bool ParserNmea::startParsing() {
             return true;
         }
 
+        memset(&pBuff, 0, sizeof(pBuff));
         size_t nBytesRead = fread(pBuff, 1, 512, fp);
 
         CNMEAParserData::ERROR_E nErr;
@@ -269,6 +311,8 @@ bool ParserNmea::stopParsing() {
         fclose(fp);
         fp = nullptr;
     }
+
+    SetGpsStatus(NYX_GPS_STATUS_SESSION_END);
 
     return true;
 }

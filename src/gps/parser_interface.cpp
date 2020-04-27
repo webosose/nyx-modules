@@ -19,6 +19,7 @@
 /*
  * *******************************************************************/
 
+#include <cstring>
 #include "parser_interface.h"
 
 #include <future>
@@ -45,15 +46,25 @@ static gps_release_wakelock gps_rel_lock_cb = nullptr;
 static gps_request_utc_time gps_req_utc_cb = nullptr;
 static gps_create_thread gps_cre_thr_cb = nullptr;
 
-
-void nmea_loc_cb(GpsLocation* location, void* locExt) {
+void parser_loc_cb(GpsLocation* location, void* locExt) {
     if (parsing_engine_on && gps_loc_cb)
         gps_loc_cb(location);
 }
 
-void nmea_sv_cb(GpsSvStatus* sv_status, void* svExt) {
+void parser_sv_cb(GpsSvStatus* sv_status, void* svExt) {
     if (parsing_engine_on && gps_sv_cb)
         gps_sv_cb(sv_status);
+}
+
+void parser_status_cb(GpsStatus *gps_status, void* statusExt) {
+    if(gps_status_cb)
+        gps_status_cb(gps_status);
+}
+
+void parser_nmea_cb(GpsUtcTime now, const char *buff, int len) {
+    if(parsing_engine_on && gps_nmea_cb){
+        gps_nmea_cb(now, buff, len);
+    }
 }
 
 // Function declarations for sLocEngInterface
@@ -98,6 +109,7 @@ static int loc_init(GpsCallbacks* callbacks)
     parserNmeaObj = ParserNmea::getInstance();
     parserThreadPoolObj = getThreadInstance();
 
+    //parserThreadPoolObj->enqueue(&SetGpsStatus, NYX_GPS_STATUS_ENGINE_ON);
     return 0;
 }
 
@@ -112,6 +124,7 @@ static int  loc_stop() {
 }
 
 static void loc_cleanup() {
+    SetGpsStatus(NYX_GPS_STATUS_ENGINE_OFF);
     parsing_engine_on = false;
     gps_loc_cb = nullptr;
     gps_sv_cb = nullptr;
