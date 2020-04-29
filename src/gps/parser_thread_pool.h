@@ -43,9 +43,10 @@ private:
     std::condition_variable condition;
     std::mutex queue_mutex;
     std::queue< std::function<void()> > parser_tasks;
+    unsigned int sleepFor;
 
 public:
-    ParserThreadPool(size_t);
+    ParserThreadPool(size_t threads, unsigned int sleepTime = 0);
     template<class F, class... Args>
     auto enqueue(F&& f, Args&&... args)
         -> std::future<typename std::result_of<F(Args...)>::type>;
@@ -54,8 +55,9 @@ public:
 };
 
 
-inline ParserThreadPool::ParserThreadPool(size_t threads)
+inline ParserThreadPool::ParserThreadPool(size_t threads, unsigned int sleepTime)
     :   terminate(false)
+    ,   sleepFor(sleepTime)
 {
     for(size_t i = 0;i<threads;++i)
         workers.emplace_back(
@@ -69,13 +71,17 @@ inline ParserThreadPool::ParserThreadPool(size_t threads)
                         std::unique_lock<std::mutex> lock(this->queue_mutex);
                         this->condition.wait(lock,
                             [this]{ return this->terminate || !this->parser_tasks.empty(); });
-                        if(this->terminate && this->parser_tasks.empty())
+                        //if(this->terminate && this->parser_tasks.empty())
+                        if (this->terminate)
                             return;
                         task = std::move(this->parser_tasks.front());
                         this->parser_tasks.pop();
+                        if (sleepFor)
+                            std::this_thread::sleep_for (std::chrono::seconds(sleepFor));
                     }
 
-                    task();
+                    if (this->terminate == false)
+                        task();
                 }
             }
         );
@@ -111,6 +117,8 @@ inline ParserThreadPool::~ParserThreadPool()
         try {
             std::unique_lock<std::mutex> lock(queue_mutex);
             terminate = true;
+            while(!this->parser_tasks.empty())
+                this->parser_tasks.pop();
         }
         catch(const std::system_error& e) {
             nyx_error("MSGID_NMEA_PARSER", 0, "Exception occured:  %s", e.what());

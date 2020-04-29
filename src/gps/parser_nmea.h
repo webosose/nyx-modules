@@ -24,6 +24,8 @@
 
 #include <nmeaparser/NMEAParser.h>
 
+class ParserThreadPool;
+
 class ParserNmea : public CNMEAParser {
 public:
 
@@ -36,11 +38,18 @@ private:
     FILE *fp;
     bool stopParser;
 
+    ParserThreadPool* parserThreadPoolObj;
+
     ParserNmea();
     ~ParserNmea();
 
     virtual CNMEAParserData::ERROR_E ProcessRxCommand(char *pCmd, char *pData);
     virtual void OnError(CNMEAParserData::ERROR_E nError, char *pCmd);
+
+    bool SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T rmcData);
+    bool SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T gsaData);
+    bool SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T gsvData);
+    bool SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T ggaData);
 };
 
 #endif // _PARSER_NMEA_H_

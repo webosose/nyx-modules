@@ -37,6 +37,8 @@ extern "C" {
 #define GPS_LOCATION_MAP_URL_SIZE           400
 #define GPS_LOCATION_MAP_INDEX_SIZE         16
 
+const char nmea_file_path[] = "/media/internal/location/gps.nmea";
+
 typedef struct {
     /** set to sizeof(GpsLocation) */
     size_t          size;
@@ -72,9 +74,6 @@ typedef struct {
 #define GpsStatus               nyx_gps_status_t
 #define GpsSvInfo               nyx_gps_sv_info_t
 #define GpsSvStatus             nyx_gps_sv_status_t
-#define AGpsRefLocationCellID   nyx_agps_ref_location_cellid_t
-#define AGpsRefLocationMac      nyx_agps_ref_location_mac_t
-#define AGpsRefLocation         nyx_agps_ref_location_t
 
 typedef void (* gps_location_callback)(GpsLocation* location);
 typedef void (* gps_status_callback)(GpsStatus* status);

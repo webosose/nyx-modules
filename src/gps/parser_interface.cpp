@@ -31,6 +31,7 @@
 extern "C" {
 #endif
 
+static bool parsing_engine_on = false;
 static ParserNmea* parserNmeaObj = nullptr;
 static ParserThreadPool* parserThreadPoolObj = nullptr;
 
@@ -44,13 +45,14 @@ static gps_release_wakelock gps_rel_lock_cb = nullptr;
 static gps_request_utc_time gps_req_utc_cb = nullptr;
 static gps_create_thread gps_cre_thr_cb = nullptr;
 
+
 void nmea_loc_cb(GpsLocation* location, void* locExt) {
-    if (gps_loc_cb)
+    if (parsing_engine_on && gps_loc_cb)
         gps_loc_cb(location);
 }
 
 void nmea_sv_cb(GpsSvStatus* sv_status, void* svExt) {
-    if (gps_sv_cb)
+    if (parsing_engine_on && gps_sv_cb)
         gps_sv_cb(sv_status);
 }
 
@@ -71,8 +73,12 @@ static const GpsInterface sLocEngInterface =
 };
 
 const GpsInterface* get_gps_interface() {
-    nyx_debug("MSGID_NMEA_PARSER Fun: %s, Line: %d", __FUNCTION__, __LINE__);
     return &sLocEngInterface;
+}
+
+ParserThreadPool* getThreadInstance() {
+    static ParserThreadPool threadObj(1);
+    return &threadObj;
 }
 
 static int loc_init(GpsCallbacks* callbacks)
@@ -90,12 +96,13 @@ static int loc_init(GpsCallbacks* callbacks)
     }
 
     parserNmeaObj = ParserNmea::getInstance();
-    parserThreadPoolObj = new ParserThreadPool(1);
-    return 1;
+    parserThreadPoolObj = getThreadInstance();
+
+    return 0;
 }
 
 static int  loc_start() {
-     parserThreadPoolObj->enqueue(&startParsing);
+    parserThreadPoolObj->enqueue(&startParsing);
     return 0;
 }
 
@@ -105,6 +112,7 @@ static int  loc_stop() {
 }
 
 static void loc_cleanup() {
+    parsing_engine_on = false;
     gps_loc_cb = nullptr;
     gps_sv_cb = nullptr;
     gps_status_cb = nullptr;
@@ -117,14 +125,16 @@ static void loc_cleanup() {
 }
 
 bool startParsing() {
-    nyx_debug("MSGID_NMEA_PARSER Fun: %s, Line: %d", __FUNCTION__, __LINE__);
+    parsing_engine_on = true;
+
     if (parserNmeaObj)
         return parserNmeaObj->startParsing();
     return false;
 }
 
 bool stopParsing() {
-    nyx_debug("MSGID_NMEA_PARSER Fun: %s, Line: %d", __FUNCTION__, __LINE__);
+    parsing_engine_on = false;
+
     if (parserNmeaObj)
         return parserNmeaObj->stopParsing();
    return false;
