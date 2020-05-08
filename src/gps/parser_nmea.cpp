@@ -22,15 +22,20 @@
 #include "parser_nmea.h"
 
 #include <cstring>
-#include <thread>
 #include <sys/time.h>
+#include <thread>
 #include <time.h>
 
 #include <nyx/module/nyx_log.h>
 
-#include "parser_thread_pool.h"
-#include "parser_interface.h"
 #include "gps_storage.h"
+#include "parser_inotify.h"
+#include "parser_interface.h"
+#include "parser_thread_pool.h"
+
+const std::string nmea_file_path ="/media/internal/location";
+const std::string nmea_file_name ="gps.nmea";
+const std::string nmea_complete_path = nmea_file_path + "/" + nmea_file_name;
 
 bool ParserNmea::SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData, char *nmea_data) {
     GpsLocation location;
@@ -175,7 +180,7 @@ CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, c
     if (strstr(pCmd, "GPGGA") != NULL) {
 	CNMEAParserData::GGA_DATA_T* ggaData =  (CNMEAParserData::GGA_DATA_T*)malloc(sizeof(CNMEAParserData::GGA_DATA_T));
         if (GetGPGGA(*ggaData) == CNMEAParserData::ERROR_OK) {
-            parserThreadPoolObj->enqueue([=](){
+            mParserThreadPoolObj->enqueue([=](){
                 SetGpsGGA_Data(*ggaData, nmea_data);
                 free(nmea_data);
             });
@@ -184,7 +189,7 @@ CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, c
     else if (strstr(pCmd, "GPGSV") != NULL) { //GPS GSV Data
         CNMEAParserData::GSV_DATA_T* gsvData = (CNMEAParserData::GSV_DATA_T*)malloc(sizeof(CNMEAParserData::GSV_DATA_T));
         if (GetGPGSV(*gsvData) == CNMEAParserData::ERROR_OK) {
-            parserThreadPoolObj->enqueue([=](){
+            mParserThreadPoolObj->enqueue([=](){
                 SetGpsGSV_Data(*gsvData, nmea_data);
                 free(nmea_data);
             });
@@ -193,7 +198,7 @@ CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, c
     else if (strstr(pCmd, "GPGSA") != NULL) {
         CNMEAParserData::GSA_DATA_T* gsaData = (CNMEAParserData::GSA_DATA_T*)malloc(sizeof(CNMEAParserData::GSA_DATA_T));
         if (GetGPGSA(*gsaData) == CNMEAParserData::ERROR_OK) {
-            parserThreadPoolObj->enqueue([=](){
+            mParserThreadPoolObj->enqueue([=](){
                 SetGpsGSA_Data(*gsaData, nmea_data);
                 free(nmea_data);
             });
@@ -202,7 +207,7 @@ CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, c
     else if (strstr(pCmd, "GPRMC") != NULL) {
         CNMEAParserData::RMC_DATA_T* rmcData = (CNMEAParserData::RMC_DATA_T*)malloc(sizeof(CNMEAParserData::RMC_DATA_T));
         if(GetGPRMC(*rmcData) == CNMEAParserData::ERROR_OK) {
-            parserThreadPoolObj->enqueue([=](){
+            mParserThreadPoolObj->enqueue([=](){
                 SetGpsRMC_Data(*rmcData, nmea_data);
                 free(nmea_data);
             });
@@ -220,19 +225,23 @@ void ParserNmea::OnError(CNMEAParserData::ERROR_E nError, char *pCmd) {
 }
 
 ParserNmea::ParserNmea()
-    :    fp(nullptr)
-    ,    stopParser(false)
-    ,    parserThreadPoolObj(nullptr) {
+    :    mNmeaFp(nullptr)
+    ,    mStopParser(false)
+    ,    mParserThreadPoolObj(nullptr)
+    ,    mSeekOffset(0) {
+    parser_inotify_init();
 }
 
 ParserNmea::~ParserNmea() {
-    if (parserThreadPoolObj) {
-        delete parserThreadPoolObj;
-        parserThreadPoolObj = nullptr;
+    parser_inotify_cleanup();
+
+    if (mParserThreadPoolObj) {
+        delete mParserThreadPoolObj;
+        mParserThreadPoolObj = nullptr;
     }
 
-    if (fp) {
-        fclose(fp);
+    if (mNmeaFp) {
+        fclose(mNmeaFp);
     }
 }
 
@@ -241,9 +250,24 @@ ParserNmea* ParserNmea::getInstance() {
     return &parserNmeaObj;
 }
 
+static void parser_inotify_handler(struct inotify_event *event,
+                                        const char *ident)
+{
+    if (!ident)
+        return;
+
+    if ((strlen(ident) != nmea_file_name.size()) || strncmp(ident, nmea_file_name.c_str(), nmea_file_name.size()) != 0)
+        return;
+
+    if (event->mask & (IN_MODIFY | IN_MOVED_TO)) {
+        parser_inotify_unregister(nmea_file_path.c_str(), parser_inotify_handler);
+        startParsing();
+    }
+}
+
 bool ParserNmea::startParsing() {
-    fp = fopen(nmea_file_path, "r");
-    if (fp == nullptr) {
+    mNmeaFp = fopen(nmea_complete_path.c_str(), "r");
+    if (mNmeaFp == nullptr) {
         nyx_error("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d Could not open file: %s \n", __FUNCTION__, __LINE__, nmea_file_path);
         return false;
     }
@@ -267,49 +291,59 @@ bool ParserNmea::startParsing() {
 
     interval = latency/2;
 
-    if (!parserThreadPoolObj) {
-        parserThreadPoolObj = new ParserThreadPool(1, interval);
+    if (!mParserThreadPoolObj) {
+        mParserThreadPoolObj = new ParserThreadPool(1, interval);
+    }
+
+    if (mSeekOffset) {
+        fseek(mNmeaFp, mSeekOffset, SEEK_SET);
     }
 
     char pBuff[1024];
-    while (fp && feof(fp) == 0) {
+    while (mNmeaFp && feof(mNmeaFp) == 0) {
 
-        if (stopParser)
+        if (mStopParser)
         {
-            stopParser = false;
-            fclose(fp);
-            fp = nullptr;
+            mStopParser = false;
+            fclose(mNmeaFp);
+            mNmeaFp = nullptr;
             return true;
         }
 
         memset(&pBuff, 0, sizeof(pBuff));
-        size_t nBytesRead = fread(pBuff, 1, 512, fp);
+        size_t nBytesRead = fread(pBuff, 1, 512, mNmeaFp);
 
         CNMEAParserData::ERROR_E nErr;
         if ((nErr = ProcessNMEABuffer(pBuff, nBytesRead)) != CNMEAParserData::ERROR_OK) {
             nyx_error("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d error: %d \n", __FUNCTION__, __LINE__, nErr);
             return false;
         }
+        mSeekOffset += nBytesRead;
     }
 
-    if (fp) {
-        fclose(fp);
-        fp = nullptr;
+    if (mNmeaFp) {
+        fclose(mNmeaFp);
+        mNmeaFp = nullptr;
     }
+
+    parser_inotify_register(nmea_file_path.c_str(), parser_inotify_handler);
 
     return false;
 }
 
 bool ParserNmea::stopParsing() {
-    if (parserThreadPoolObj) {
-        delete parserThreadPoolObj;
-        parserThreadPoolObj = nullptr;
+    mSeekOffset = 0;
+    parser_inotify_unregister(nmea_file_path.c_str(), parser_inotify_handler);
+
+    if (mParserThreadPoolObj) {
+        delete mParserThreadPoolObj;
+        mParserThreadPoolObj = nullptr;
     }
 
-    if (fp) {
-        stopParser = true;
-        fclose(fp);
-        fp = nullptr;
+    if (mNmeaFp) {
+        mStopParser = true;
+        fclose(mNmeaFp);
+        mNmeaFp = nullptr;
     }
 
     SetGpsStatus(NYX_GPS_STATUS_SESSION_END);

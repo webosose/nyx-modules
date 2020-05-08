@@ -37,8 +37,6 @@ extern "C" {
 #define GPS_LOCATION_MAP_URL_SIZE           400
 #define GPS_LOCATION_MAP_INDEX_SIZE         16
 
-const char nmea_file_path[] = "/media/internal/location/gps.nmea";
-
 typedef struct {
     /** set to sizeof(GpsLocation) */
     size_t          size;

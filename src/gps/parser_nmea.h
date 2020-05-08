@@ -24,6 +24,7 @@
 
 #include <nmeaparser/NMEAParser.h>
 
+
 class ParserThreadPool;
 
 class ParserNmea : public CNMEAParser {
@@ -35,10 +36,11 @@ public:
     bool stopParsing();
 
 private:
-    FILE *fp;
-    bool stopParser;
+    FILE *mNmeaFp;
+    long int mSeekOffset;
 
-    ParserThreadPool* parserThreadPoolObj;
+    bool mStopParser;
+    ParserThreadPool* mParserThreadPoolObj;
 
     ParserNmea();
     ~ParserNmea();
