@@ -22,4 +22,4 @@ webos_add_compiler_flags(ALL ${NMEAPARSER_CFLAGS_OTHER})
 
 webos_build_nyx_module(GpsMock
                        SOURCES gps_mock.c parser_interface.cpp parser_nmea.cpp
-                       LIBRARIES ${MODULE_LIBRARIES} ${PMLOG_LDFLAGS} ${NYXLIB_LDFLAGS} ${NMEAPARSER_LDFLAGS} -lrt -lpthread -lNMEAParserLib)
+                       LIBRARIES ${MODULE_LIBRARIES} ${PMLOG_LDFLAGS} ${NYXLIB_LDFLAGS} ${NMEAPARSER_LDFLAGS} ${GLIB2_LDFLAGS} -lrt -lpthread -lNMEAParserLib)

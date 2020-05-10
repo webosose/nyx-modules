@@ -26,6 +26,7 @@
 #include <nyx/module/nyx_utils.h>
 
 #include "parser_interface.h"
+#include "gps_storage.h"
 
 NYX_DECLARE_MODULE(NYX_DEVICE_GPS, "GpsMock");
 
@@ -37,6 +38,8 @@ typedef struct methodStringPair
 
 static const methodStringPair_t mapMethodString[] = {
     {NYX_GPS_INIT_MODULE_METHOD,                        "init"},
+    {NYX_GPS_ENABLE_MOCK_MODULE_METHOD,                 "enable_mock"},
+    {NYX_GPS_SET_MOCK_LATENCY_MODULE_METHOD,            "set_mock_latency"},
     {NYX_GPS_START_MODULE_METHOD,                       "start"},
     {NYX_GPS_STOP_MODULE_METHOD,                        "stop"},
     {NYX_GPS_CLEANUP_MODULE_METHOD,                     "cleanup"},
@@ -285,14 +288,14 @@ nyx_error_t nyx_module_open(nyx_instance_t instance, nyx_device_t **device_ptr)
 
     nyx_debug("Succeeded to get GPS NMEA parser interface");
 
-    if ((error = nyx_module_set_description(instance, nyx_dev, "Module to drive the Qualcomm GPS")) != NYX_ERROR_NONE) {
+    if ((error = nyx_module_set_description(instance, nyx_dev, "Module to drive the GPS")) != NYX_ERROR_NONE) {
         nyx_error("MSGID_NYX_MOD_GPS_SET_DESCRIBE_ERR", 0, "Failed to set GPS nyx module description");
         goto ERROR_HANDLER;
     }
 
     nyx_debug("Succeeded to set GPS nyx module description");
 
-    if ((error = nyx_module_set_name(instance, nyx_dev, "GPS Qualcomm")) != NYX_ERROR_NONE) {
+    if ((error = nyx_module_set_name(instance, nyx_dev, "GPS")) != NYX_ERROR_NONE) {
         nyx_error("MSGID_NYX_MOD_GPS_SET_NAME_ERR", 0, "Failed to set GPS nyx module name");
         goto ERROR_HANDLER;
     }
@@ -394,6 +397,54 @@ nyx_error_t init(nyx_device_handle_t handle,
     return NYX_ERROR_NONE;
 }
 
+nyx_error_t enable_mock(nyx_device_handle_t handle, int32_t enable)
+{
+    if (nyx_dev == NULL)
+        return NYX_ERROR_DEVICE_NOT_EXIST;
+
+    if (handle != nyx_dev)
+        return NYX_ERROR_INVALID_HANDLE;
+
+    //create file and write mock data
+    GKeyFile *keyfile = gps_config_open_file();
+    if (keyfile == NULL) {
+        nyx_error("MSGID_NMEA_PARSER", 0, "mock file create/open failed");
+        return NYX_ERROR_INCOMPATIBLE_LIBRARY;
+    }
+
+    g_key_file_set_boolean(keyfile, GPS_MOCK_INFO, "MOCK", (bool)enable);
+
+    gps_config_save_file(keyfile);
+
+    g_key_file_free(keyfile);
+
+    return NYX_ERROR_NONE;
+}
+
+nyx_error_t set_mock_latency(nyx_device_handle_t handle, int32_t latency)
+{
+    if (nyx_dev == NULL)
+        return NYX_ERROR_DEVICE_NOT_EXIST;
+
+    if (handle != nyx_dev)
+        return NYX_ERROR_INVALID_HANDLE;
+
+    //set latency
+    GKeyFile *keyfile = gps_config_open_file();
+    if (keyfile == NULL) {
+        nyx_error("MSGID_NMEA_PARSER", 0, "mock file create/open failed");
+        return NYX_ERROR_INCOMPATIBLE_LIBRARY;
+    }
+
+    g_key_file_set_integer(keyfile, GPS_MOCK_INFO, "LATENCY", latency);
+
+    gps_config_save_file(keyfile);
+
+    g_key_file_free(keyfile);
+
+    return NYX_ERROR_NONE;
+}
+
 nyx_error_t start(nyx_device_handle_t handle)
 {
     if (nyx_dev == NULL)
@@ -401,6 +452,21 @@ nyx_error_t start(nyx_device_handle_t handle)
 
     if (handle != nyx_dev)
         return NYX_ERROR_INVALID_HANDLE;
+
+    //check mock enabled or not
+    GKeyFile *keyfile = gps_config_load_file();
+    if (!keyfile) {
+        nyx_error("MSGID_NMEA_PARSER", 0, "mock config file loading failed");
+        return NYX_ERROR_DEVICE_NOT_EXIST;
+    }
+
+    bool value = g_key_file_get_boolean(keyfile, GPS_MOCK_INFO, "MOCK", NULL);
+    if (!value) {
+        g_key_file_free(keyfile);
+        return NYX_ERROR_DEVICE_NOT_EXIST;
+    }
+
+    g_key_file_free(keyfile);
 
     if (!pGpsInterface || pGpsInterface->start() != 0)
         return NYX_ERROR_DEVICE_UNAVAILABLE;

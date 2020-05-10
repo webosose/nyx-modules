@@ -30,8 +30,9 @@
 
 #include "parser_thread_pool.h"
 #include "parser_interface.h"
+#include "gps_storage.h"
 
-bool ParserNmea::SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T ggaData) {
+bool ParserNmea::SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData) {
     GpsLocation location;
     memset(&location, 0, sizeof(GpsLocation));
 
@@ -63,7 +64,7 @@ bool ParserNmea::SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T ggaData) {
     return CNMEAParserData::ERROR_OK;
 }
 
-bool ParserNmea::SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T gsvData) {
+bool ParserNmea::SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T& gsvData) {
     GpsSvStatus sv_status;
     sv_status.num_svs = gsvData.nSatsInView;
     for(auto i = 0; i < sv_status.num_svs; i++)
@@ -84,7 +85,7 @@ bool ParserNmea::SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T gsvData) {
     return CNMEAParserData::ERROR_OK;
 }
 
-bool ParserNmea::SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T gsaData) {
+bool ParserNmea::SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T& gsaData) {
     nyx_debug("    nAutoMode: %d\n", gsaData.nAutoMode);
     nyx_debug("    nMode: %d\n", gsaData.nMode);
     nyx_debug("    GPS dPDOP: %f\n", gsaData.dPDOP);
@@ -95,7 +96,7 @@ bool ParserNmea::SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T gsaData) {
     return CNMEAParserData::ERROR_OK;
 }
 
-bool ParserNmea::SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T rmcData) {
+bool ParserNmea::SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T& rmcData) {
     nyx_debug("GPRMC Parsed!\n");
     nyx_debug("   m_timeGGA:            %ld\n", rmcData.m_timeGGA);
     nyx_debug("   Time:                %02d:%02d:%02d\n", rmcData.m_nHour, rmcData.m_nMinute, rmcData.m_nSecond);
@@ -181,7 +182,8 @@ void ParserNmea::OnError(CNMEAParserData::ERROR_E nError, char *pCmd) {
 
 ParserNmea::ParserNmea()
     :    fp(nullptr)
-    ,    stopParser(false) {
+    ,    stopParser(false)
+    ,    parserThreadPoolObj(nullptr) {
 }
 
 ParserNmea::~ParserNmea() {
@@ -207,20 +209,35 @@ bool ParserNmea::startParsing() {
         return false;
     }
 
+    GKeyFile *keyfile = gps_config_load_file();
+    if (!keyfile) {
+        nyx_error("MSGID_NMEA_PARSER", 0, "mock config file not available \n");
+        return false;
+    }
+
+    int latency, interval;
+    latency = g_key_file_get_integer(keyfile, GPS_MOCK_INFO, "LATENCY", NULL);
+    if (!latency) {
+        nyx_debug("config file latency not available so default latency:%d\n", DEFAULT_LATENCY);
+        latency = DEFAULT_LATENCY;
+    }
+
+    g_key_file_free(keyfile);
+
+    interval = latency/2;
+
     if (!parserThreadPoolObj) {
-        parserThreadPoolObj = new ParserThreadPool(1, 5);
+        parserThreadPoolObj = new ParserThreadPool(1, interval);
     }
 
     char pBuff[1024];
-    while (feof(fp) == 0) {
+    while (fp && feof(fp) == 0) {
 
         if (stopParser)
         {
             stopParser = false;
-            if (fp) {
-                fclose(fp);
-                fp = nullptr;
-            }
+            fclose(fp);
+            fp = nullptr;
             return true;
         }
 
