@@ -24,6 +24,17 @@
 
 #include <nmeaparser/NMEAParser.h>
 
+typedef struct {
+    //for getLocationUpdates
+    int64_t timestamp; // in milli seconds
+    double latitude; // -180.0 ~ 180.0
+    double longitude; // -180.0 ~ 180.0
+    double altitude;
+    double direction; //0.0 ~ 360.0
+    double speed; // in meters/seconds
+    double horizAccuracy;
+    double vertAccuracy;
+} gps_data;
 
 class ParserThreadPool;
 
@@ -42,8 +53,16 @@ private:
     bool mStopParser;
     ParserThreadPool* mParserThreadPoolObj;
 
+    gps_data mGpsData;
+
     ParserNmea();
     ~ParserNmea();
+
+    void init();
+    void deinit();
+
+    void sendLocationUpdates();
+    void sendNmeaUpdates(char * rawNmea);
 
     virtual CNMEAParserData::ERROR_E ProcessRxCommand(char *pCmd, char *pData, char *checksum);
     virtual void OnError(CNMEAParserData::ERROR_E nError, char *pCmd);
@@ -52,7 +71,6 @@ private:
     bool SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T& gsaData, char *nmea_data);
     bool SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T& gsvData, char *nmea_data);
     bool SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData, char *nmea_data);
-    bool SetGpsNmea_Data(const char *buff);
 };
 
 void SetGpsStatus(int status);

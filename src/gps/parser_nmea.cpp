@@ -37,21 +37,32 @@ const std::string nmea_file_path ="/media/internal/location";
 const std::string nmea_file_name ="gps.nmea";
 const std::string nmea_complete_path = nmea_file_path + "/" + nmea_file_name;
 
-bool ParserNmea::SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData, char *nmea_data) {
+int64_t getCurrentTime() {
+    struct timeval tval;
+    gettimeofday(&tval, (struct timezone *) NULL);
+    return (tval.tv_sec * 1000LL + tval.tv_usec/1000);
+}
+
+void ParserNmea::sendLocationUpdates() {
     GpsLocation location;
     memset(&location, 0, sizeof(GpsLocation));
 
-    location.latitude = ggaData.m_dLatitude;
-    location.longitude = ggaData.m_dLongitude;
-    location.altitude = ggaData.m_dAltitudeMSL;
-    //location.speed = ggaData.m_dVertSpeed;
-    location.bearing = ggaData.m_dHDOP;
-
-    struct timeval tval;
-    gettimeofday(&tval, (struct timezone *) NULL);
-    location.timestamp = tval.tv_sec * 1000LL + tval.tv_usec/1000;
+    location.latitude = mGpsData.latitude;
+    location.longitude = mGpsData.longitude;
+    location.altitude = mGpsData.altitude;
+    location.speed = mGpsData.speed;
+    location.accuracy = mGpsData.horizAccuracy;
+    location.timestamp = getCurrentTime();
 
     parser_loc_cb(&location, nullptr);
+}
+
+void ParserNmea::sendNmeaUpdates(char * rawNmea) {
+    if (rawNmea)
+        parser_nmea_cb(getCurrentTime(), rawNmea, (int)strlen(rawNmea));
+}
+
+bool ParserNmea::SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData, char *nmea_data) {
 
     nyx_debug("GPGGA Parsed!\n");
     nyx_debug("   Time:                %02d:%02d:%02d\n", ggaData.m_nHour, ggaData.m_nMinute, ggaData.m_nSecond);
@@ -66,7 +77,13 @@ bool ParserNmea::SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData, char *nmea
     nyx_debug("   Geoidal Separation:  %f\n", ggaData.m_dGeoidalSep);
     nyx_debug("   Vertical Speed:      %.02f\n", ggaData.m_dVertSpeed);
 
-    SetGpsNmea_Data(nmea_data);
+    mGpsData.latitude = ggaData.m_dLatitude;
+    mGpsData.longitude = ggaData.m_dLongitude;
+    mGpsData.altitude = ggaData.m_dAltitudeMSL;
+    mGpsData.horizAccuracy = ggaData.m_dHDOP;
+
+    sendLocationUpdates();
+    sendNmeaUpdates(nmea_data);
     return CNMEAParserData::ERROR_OK;
 }
 
@@ -90,7 +107,8 @@ bool ParserNmea::SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T& gsvData, char *nmea
     }
 
     parser_sv_cb(&sv_status, nullptr);
-    SetGpsNmea_Data(nmea_data);
+
+    sendNmeaUpdates(nmea_data);
     return CNMEAParserData::ERROR_OK;
 }
 
@@ -102,7 +120,7 @@ bool ParserNmea::SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T& gsaData, char *nmea
     nyx_debug("    GPS dVDOP: %f\n", gsaData.dVDOP);
     nyx_debug("    GPS uGGACount: %u\n", gsaData.uGGACount);
 
-    SetGpsNmea_Data(nmea_data);
+    sendNmeaUpdates(nmea_data);
 
     return CNMEAParserData::ERROR_OK;
 }
@@ -127,34 +145,15 @@ bool ParserNmea::SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T& rmcData, char *nmea
                                                 rmcData.m_nDay, rmcData.m_nMonth, (rmcData.m_nYear-1900)};
     nyx_debug("   timeStamp:    %ld\n", ((mktime(&timeStamp)+(long)(rmcData.m_dSecond*1000))*1000));
 */
-    GpsLocation location;
-    memset(&location, 0, sizeof(GpsLocation));
+    mGpsData.latitude = rmcData.m_dLatitude;
+    mGpsData.longitude = rmcData.m_dLongitude;
+    mGpsData.altitude = rmcData.m_dAltitudeMSL;
+    mGpsData.speed = rmcData.m_dSpeedKnots*0.514;
+    mGpsData.direction = rmcData.m_dTrackAngle;
 
-    location.latitude = rmcData.m_dLatitude;
-    location.longitude = rmcData.m_dLongitude;
-    location.altitude = rmcData.m_dAltitudeMSL;
-    location.speed = rmcData.m_dSpeedKnots*0.514;
-    //location.timestamp = ((mktime(&timeStamp)+(long)(rmcData.m_dSecond*1000))*1000);
-    struct timeval tval;
-    gettimeofday(&tval, (struct timezone *) NULL);
-    location.timestamp = tval.tv_sec * 1000LL + tval.tv_usec/1000;
+    sendLocationUpdates();
+    sendNmeaUpdates(nmea_data);
 
-    parser_loc_cb(&location, nullptr);
-    SetGpsNmea_Data(nmea_data);
-
-    return CNMEAParserData::ERROR_OK;
-}
-
-bool ParserNmea::SetGpsNmea_Data(const char *buff)
-{
-    if (!buff)
-        return CNMEAParserData::ERROR_OK;
-
-    GpsUtcTime now;
-    struct timeval tval;
-    gettimeofday(&tval, (struct timezone *) NULL);
-    now = tval.tv_sec * 1000LL + tval.tv_usec / 1000;
-    parser_nmea_cb(now, buff, (int)strlen(buff));
     return CNMEAParserData::ERROR_OK;
 }
 
@@ -226,9 +225,10 @@ void ParserNmea::OnError(CNMEAParserData::ERROR_E nError, char *pCmd) {
 
 ParserNmea::ParserNmea()
     :    mNmeaFp(nullptr)
+    ,    mSeekOffset(0)
     ,    mStopParser(false)
-    ,    mParserThreadPoolObj(nullptr)
-    ,    mSeekOffset(0) {
+    ,    mParserThreadPoolObj(nullptr) {
+    memset(&mGpsData, 0, sizeof(mGpsData));
     parser_inotify_init();
 }
 
@@ -248,6 +248,18 @@ ParserNmea::~ParserNmea() {
 ParserNmea* ParserNmea::getInstance() {
     static ParserNmea parserNmeaObj;
     return &parserNmeaObj;
+}
+
+void ParserNmea::init() {
+    mGpsData.altitude = -1;
+    mGpsData.speed = -1;
+    mGpsData.direction = -1;
+    mGpsData.horizAccuracy = -1;
+}
+
+void ParserNmea::deinit() {
+    ResetData();
+    memset(&mGpsData, 0, sizeof(mGpsData));
 }
 
 static void parser_inotify_handler(struct inotify_event *event,
@@ -272,6 +284,7 @@ bool ParserNmea::startParsing() {
         return false;
     }
 
+    init();
     SetGpsStatus(NYX_GPS_STATUS_SESSION_BEGIN);
 
     GKeyFile *keyfile = gps_config_load_file();
@@ -347,6 +360,8 @@ bool ParserNmea::stopParsing() {
     }
 
     SetGpsStatus(NYX_GPS_STATUS_SESSION_END);
+
+    deinit();
 
     return true;
 }
