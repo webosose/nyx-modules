@@ -40,6 +40,7 @@ static const methodStringPair_t mapMethodString[] = {
     {NYX_GPS_INIT_MODULE_METHOD,                        "init"},
     {NYX_GPS_ENABLE_MOCK_MODULE_METHOD,                 "enable_mock"},
     {NYX_GPS_SET_MOCK_LATENCY_MODULE_METHOD,            "set_mock_latency"},
+    {NYX_GPS_QUERY_PROVIDERS_MODULE_METHOD,             "providers_query"},
     {NYX_GPS_START_MODULE_METHOD,                       "start"},
     {NYX_GPS_STOP_MODULE_METHOD,                        "stop"},
     {NYX_GPS_CLEANUP_MODULE_METHOD,                     "cleanup"},
@@ -443,6 +444,61 @@ nyx_error_t set_mock_latency(nyx_device_handle_t handle, int32_t latency)
     g_key_file_free(keyfile);
 
     return NYX_ERROR_NONE;
+}
+
+nyx_error_t providers_query(nyx_device_handle_t handle, nyx_gps_providers_query_t query, const char **dest)
+{
+    int error = NYX_ERROR_NONE;
+
+    if (nyx_dev == NULL)
+        return NYX_ERROR_DEVICE_NOT_EXIST;
+
+    if (handle != nyx_dev)
+        return NYX_ERROR_INVALID_HANDLE;
+
+    //check mock enabled or not
+    GKeyFile *keyfile = gps_config_load_file();
+    if (keyfile) {
+        bool value = g_key_file_get_boolean(keyfile, GPS_MOCK_INFO, "MOCK", NULL);
+        if (!value) {
+            error = NYX_ERROR_NOT_FOUND;
+        }
+        g_key_file_free(keyfile);
+    }
+    else {
+        nyx_error("MSGID_NMEA_PARSER", 0, "mock config file loading failed");
+        error = NYX_ERROR_NOT_FOUND;
+    }
+
+    // return an empty string if there's an error
+    *dest = "";
+
+    switch(query)
+    {
+        case NYX_GPS_PROVIDER_NAME:
+            if(error == NYX_ERROR_NONE) {
+                *dest = "Mock";
+            }
+            else if(error == NYX_ERROR_NOT_FOUND) {
+                *dest = "NA";
+                error = NYX_ERROR_NONE;
+            }
+            break;
+        case NYX_GPS_PROVIDER_STATUS:
+            if(error == NYX_ERROR_NONE) {
+                *dest = "Enabled";
+            }
+            else if(error == NYX_ERROR_NOT_FOUND) {
+                *dest = "NA";
+                error = NYX_ERROR_NONE;
+            }
+            break;
+        default:
+            error = NYX_ERROR_NONE;
+            break;
+    }
+
+    return error;
 }
 
 nyx_error_t start(nyx_device_handle_t handle)
