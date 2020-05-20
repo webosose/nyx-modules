@@ -19,226 +19,143 @@
 /*
  * *******************************************************************/
 
-
-#include <errno.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <sys/inotify.h>
 #include <glib-2.0/glib.h>
+#include <sys/inotify.h>
+#include <string>
+#include <unistd.h>
+#include <stdlib.h>
 
-struct inotify_event;
+#include <nyx/module/nyx_log.h>
 
-typedef void (* inotify_event_cb) (struct inotify_event *event,
-                                   const char *ident);
+#include "parser_nmea.h"
 
-struct parser_inotify {
-    unsigned int refcount;
-    GIOChannel *channel;
-    uint watch;
-    int wd;
-    GSList *list;
+#ifndef _PARSER_INOTIFY_H_
+#define _PARSER_INOTIFY_H_
+
+
+class ParserInotify {
+public:
+    ParserInotify(std::string dirPath, ParserNmea* obj);
+    ~ParserInotify();
+
+    bool startWatch();
+    void stopWatch();
+
+private:
+    std::string mDirPath;
+    int mWatchDescriptor;
+    int mFileDescriptor;
+    GIOChannel *mChannel;
+    uint mWatch;
+
+    ParserNmea* mParserNmeaObj;
+
+    static gboolean watch_cb(GIOChannel *source, GIOCondition condition, gpointer data);
 };
 
-static void cleanup_inotify(gpointer user_data);
-
-static void parser_inotify_ref(struct parser_inotify *i)
-{
-    __sync_fetch_and_add(&i->refcount, 1);
+ParserInotify::ParserInotify(std::string dirPath, ParserNmea* obj)
+    : mDirPath(dirPath)
+    , mWatchDescriptor(-1)
+    , mChannel(nullptr)
+    , mWatch(0)
+    , mParserNmeaObj(obj) {
 }
 
-static void parser_inotify_unref(gpointer data)
-{
-    struct parser_inotify *i = (parser_inotify *) data;
-
-    if (__sync_fetch_and_sub(&i->refcount, 1) != 1)
-        return;
-
-    cleanup_inotify(data);
+ParserInotify::~ParserInotify() {
+    if (mFileDescriptor >= 0)
+        close(mFileDescriptor);
 }
 
-static GHashTable *inotify_hash;
-
-static gboolean inotify_data(GIOChannel *channel, GIOCondition cond,
-                             gpointer user_data)
-{
-    struct parser_inotify *inotify = (parser_inotify *) user_data;
-    char buffer[sizeof(struct inotify_event) + NAME_MAX + 1];
-    char *next_event;
-    gsize bytes_read;
-    GIOStatus status;
-    GSList *list;
-
-    if (cond & (G_IO_NVAL | G_IO_ERR | G_IO_HUP)) {
-        inotify->watch = 0;
+gboolean ParserInotify::watch_cb(GIOChannel *source, GIOCondition condition, gpointer data) {
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    if (condition & (G_IO_NVAL | G_IO_ERR | G_IO_HUP))
         return FALSE;
-    }
 
-    status = g_io_channel_read_chars(channel, buffer,
-                   sizeof(buffer), &bytes_read, NULL);
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    ParserInotify* parserInotifyObj = static_cast<ParserInotify*>(data);
 
-    switch (status) {
-        case G_IO_STATUS_NORMAL:
-    break;
-        case G_IO_STATUS_AGAIN:
-    return TRUE;
-        default:
-    inotify->watch = 0;
-    return FALSE;
-    }
+    char buf [sizeof(struct inotify_event) + NAME_MAX + 1];
+    gsize bytes_read;
 
-    next_event = buffer;
+    GIOStatus status = g_io_channel_read_chars(source, buf, sizeof(buf), &bytes_read, NULL);
+    if (status != G_IO_STATUS_NORMAL)
+        return FALSE;
 
-    parser_inotify_ref(inotify);
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    guint currentLen = 0;
+    while (currentLen < bytes_read) {
+        struct inotify_event* event = (struct inotify_event*) &buf[currentLen];
+        char* fileName = nullptr;
 
-    while (bytes_read > 0) {
-        struct inotify_event *event;
-        gchar *ident;
-        gsize len;
-
-        event = (struct inotify_event *) next_event;
         if (event->len)
-            ident = next_event + sizeof(struct inotify_event);
-        else
-            ident = NULL;
+            fileName = event->name;
 
-        len = sizeof(struct inotify_event) + event->len;
+        currentLen += sizeof(struct inotify_event) + event->len;
 
-        /* check if inotify_event block fit */
-        if (len > bytes_read)
-            break;
-
-        next_event += len;
-        bytes_read -= len;
-
-        for (list = inotify->list; list; list = list->next) {
-            inotify_event_cb callback = (inotify_event_cb)list->data;
-            (*callback)(event, ident);
+        nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+        if ((event->mask & IN_MODIFY) && fileName) {
+            nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+            parserInotifyObj->mParserNmeaObj->parserWatchCb(fileName);
         }
     }
-
-    parser_inotify_unref(inotify);
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
 
     return TRUE;
 }
 
-static int create_watch(const char *path, struct parser_inotify *inotify)
-{
-    int fd = inotify_init();
-    if (fd < 0)
-        return -EIO;
+bool ParserInotify::startWatch() {
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    mFileDescriptor = inotify_init();
 
-    inotify->wd = inotify_add_watch(fd, path,
-            IN_MODIFY | IN_CREATE | IN_DELETE |
-            IN_MOVED_TO | IN_MOVED_FROM);
-    if (inotify->wd < 0) {
-        close(fd);
-        return -EIO;
+    if (mFileDescriptor < 0)
+        return false;
+
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    mWatchDescriptor = inotify_add_watch(mFileDescriptor, mDirPath.c_str(), IN_MODIFY);
+
+    if (mWatchDescriptor < 0) {
+        close(mFileDescriptor);
+        mFileDescriptor = -1;
+        return false;
     }
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
 
-    inotify->channel = g_io_channel_unix_new(fd);
-    if (!inotify->channel) {
-        inotify_rm_watch(fd, inotify->wd);
-        inotify->wd = 0;
-        close(fd);
-        return -EIO;
+    mChannel = g_io_channel_unix_new(mFileDescriptor);
+    if (!mChannel) {
+        inotify_rm_watch(mFileDescriptor, mWatchDescriptor);
+        mWatchDescriptor = -1;
+        close(mFileDescriptor);
+        mFileDescriptor = -1;
+        return false;
     }
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
 
-    g_io_channel_set_close_on_unref(inotify->channel, TRUE);
-    g_io_channel_set_encoding(inotify->channel, NULL, NULL);
-    g_io_channel_set_buffered(inotify->channel, FALSE);
+    g_io_channel_set_close_on_unref(mChannel, TRUE);
+    g_io_channel_set_encoding(mChannel, NULL, NULL);
+    g_io_channel_set_buffered(mChannel, FALSE);
 
-    inotify->watch = g_io_add_watch(inotify->channel,
-                    (GIOCondition)(G_IO_IN | G_IO_HUP | G_IO_NVAL | G_IO_ERR),
-                    inotify_data, inotify);
+    mWatch = g_io_add_watch(mChannel, (GIOCondition)(G_IO_IN | G_IO_HUP | G_IO_NVAL | G_IO_ERR), watch_cb, this);
 
     return 0;
 }
 
-static void remove_watch(struct parser_inotify *inotify)
-{
-    int fd;
+void ParserInotify::stopWatch() {
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    if (mWatch > 0)
+        g_source_remove(mWatch);
 
-    if (!inotify->channel)
-        return;
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    if (mWatchDescriptor >= 0)
+        inotify_rm_watch(mFileDescriptor, mWatchDescriptor);
 
-    if (inotify->watch > 0)
-        g_source_remove(inotify->watch);
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
 
-    fd = g_io_channel_unix_get_fd(inotify->channel);
-
-    if (inotify->wd >= 0)
-        inotify_rm_watch(fd, inotify->wd);
-
-    g_io_channel_unref(inotify->channel);
-}
-
-int parser_inotify_register(const char *path, inotify_event_cb callback)
-{
-    struct parser_inotify *inotify;
-    int err;
-
-    if (!callback)
-        return -EINVAL;
-
-    inotify = (parser_inotify *)g_hash_table_lookup(inotify_hash, path);
-    if (inotify)
-        goto update;
-
-    inotify = g_try_new0(struct parser_inotify, 1);
-    if (!inotify)
-        return -ENOMEM;
-
-    inotify->refcount = 1;
-    inotify->wd = -1;
-
-    err = create_watch(path, inotify);
-    if (err < 0) {
-        g_free(inotify);
-        return err;
+    if (mChannel) {
+        g_io_channel_shutdown(mChannel, true, NULL);
+        g_io_channel_unref(mChannel);
     }
 
-    g_hash_table_replace(inotify_hash, g_strdup(path), inotify);
-
-update:
-    inotify->list = g_slist_prepend(inotify->list, (gpointer)callback);
-
-    return 0;
+    close(mFileDescriptor);
 }
 
-static void cleanup_inotify(gpointer user_data)
-{
-    struct parser_inotify *inotify = (parser_inotify *)user_data;
-
-    g_slist_free(inotify->list);
-
-    remove_watch(inotify);
-    g_free(inotify);
-}
-
-void parser_inotify_unregister(const char *path, inotify_event_cb callback)
-{
-    struct parser_inotify *inotify;
-
-    inotify = (parser_inotify *)g_hash_table_lookup(inotify_hash, path);
-    if (!inotify)
-        return;
-
-    inotify->list = g_slist_remove(inotify->list, (gconstpointer)callback);
-    if (inotify->list)
-        return;
-
-    g_hash_table_remove(inotify_hash, path);
-}
-
-int parser_inotify_init(void)
-{
-    inotify_hash = g_hash_table_new_full(g_str_hash, g_str_equal,
-                                         g_free, parser_inotify_unref);
-    return 0;
-}
-
-void parser_inotify_cleanup(void)
-{
-    g_hash_table_destroy(inotify_hash);
-}
+#endif //end _PARSER_INOTIFY_H_

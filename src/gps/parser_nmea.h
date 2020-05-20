@@ -37,6 +37,7 @@ typedef struct {
 } gps_data;
 
 class ParserThreadPool;
+class ParserInotify;
 
 class ParserNmea : public CNMEAParser {
 public:
@@ -46,12 +47,15 @@ public:
     bool startParsing();
     bool stopParsing();
 
+    void parserWatchCb(const char *ident);
+
 private:
     FILE *mNmeaFp;
-    long int mSeekOffset;
+    uint64_t mSeekOffset;
 
     bool mStopParser;
     ParserThreadPool* mParserThreadPoolObj;
+    ParserInotify* mParserInotifyObj;
 
     gps_data mGpsData;
 
@@ -67,10 +71,10 @@ private:
     virtual CNMEAParserData::ERROR_E ProcessRxCommand(char *pCmd, char *pData, char *checksum);
     virtual void OnError(CNMEAParserData::ERROR_E nError, char *pCmd);
 
-    bool SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T& rmcData, char *nmea_data);
-    bool SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T& gsaData, char *nmea_data);
-    bool SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T& gsvData, char *nmea_data);
-    bool SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T& ggaData, char *nmea_data);
+    bool SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T* rmcData, char *nmea_data);
+    bool SetGpsGSA_Data(CNMEAParserData::GSA_DATA_T* gsaData, char *nmea_data);
+    bool SetGpsGSV_Data(CNMEAParserData::GSV_DATA_T* gsvData, char *nmea_data);
+    bool SetGpsGGA_Data(CNMEAParserData::GGA_DATA_T* ggaData, char *nmea_data);
 };
 
 void SetGpsStatus(int status);

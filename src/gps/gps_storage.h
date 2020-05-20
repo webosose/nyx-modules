@@ -22,33 +22,21 @@
 #ifndef GPS_STORAGE_H
 #define GPS_STORAGE_H
 
-#include <dirent.h>
-#include <errno.h>
 #include <glib.h>
-#include <glib/gprintf.h>
-#include <sys/stat.h>
-#include <stdbool.h>
-#include <unistd.h>
 
 #include <nyx/module/nyx_log.h>
 
 #define GPS_MOCK_INFO         "GPSMOCK"
 #define DEFAULT_LATENCY       2
-#define MOCK_CONFIG_FILE_NAME "mock.conf"
-#define LOC_CONFIG_DIR        "/etc/location"
+static const char* mock_conf_path_name = "/etc/location/mock.conf";
 
-#define MODE            (S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | \
-                        S_IXGRP | S_IROTH | S_IXOTH)
-
-static GKeyFile *gps_config_load(const char *pathname)
+static GKeyFile *load_mock_conf_file(const char *file_path_name)
 {
-    GKeyFile *keyfile = NULL;
     GError *error = NULL;
+    GKeyFile *keyfile = g_key_file_new();
 
-    keyfile = g_key_file_new();
-
-    if (!g_key_file_load_from_file(keyfile, pathname, (GKeyFileFlags)0, &error)) {
-        nyx_error("MSGID_NMEA_PARSER", 0, "Unable to load %s: %s\n", pathname, error->message);
+    if (!g_key_file_load_from_file(keyfile, file_path_name, G_KEY_FILE_NONE, &error)) {
+        nyx_error("MSGID_NMEA_PARSER", 0, "Mock conf file load failed %s: %s\n", file_path_name, error->message);
         g_clear_error(&error);
 
         g_key_file_free(keyfile);
@@ -58,92 +46,33 @@ static GKeyFile *gps_config_load(const char *pathname)
     return keyfile;
 }
 
-static int gps_config_save(GKeyFile *keyfile, char *pathname)
+bool save_mock_conf_data(GKeyFile *keyfile, const char *file_path_name)
 {
-    gchar *data = NULL;
-    gsize length = 0;
+    gsize dataStringLen = 0;
     GError *error = NULL;
-    int ret = 0;
+    bool ret = true;
 
-    data = g_key_file_to_data(keyfile, &length, NULL);
+    gchar *dataString = g_key_file_to_data(keyfile, &dataStringLen, NULL);
 
-    if (!g_file_set_contents(pathname, data, length, &error)) {
-        nyx_error("MSGID_NMEA_PARSER", 0, "Failed to store information: %s\n", error->message);
+    if (!g_file_set_contents(file_path_name, dataString, dataStringLen, &error)) {
+        nyx_error("MSGID_NMEA_PARSER", 0, "Mock conf file save failed: %s\n", error->message);
         g_error_free(error);
-        ret = -EIO;
+        ret = false;
     }
 
-    g_free(data);
+    g_free(dataString);
 
     return ret;
 }
 
-GKeyFile *gps_config_open_file()
+GKeyFile *open_mock_conf_file(const char* file_path_name)
 {
-    gchar *pathname;
-    GKeyFile *keyfile = NULL;
+    GKeyFile *keyfile =  load_mock_conf_file(file_path_name);
 
-    pathname = g_strdup_printf("%s/%s", LOC_CONFIG_DIR, MOCK_CONFIG_FILE_NAME);
-    if (!pathname)
-        return NULL;
-
-    keyfile =  gps_config_load(pathname);
-    if (keyfile) {
-        g_free(pathname);
-        return keyfile;
-    }
-
-    g_free(pathname);
-
-    keyfile = g_key_file_new();
+    if (!keyfile)
+        keyfile = g_key_file_new();
 
     return keyfile;
-}
-
-GKeyFile *gps_config_load_file()
-{
-    gchar *pathname;
-    GKeyFile *keyfile = NULL;
-
-    pathname = g_strdup_printf("%s/%s", LOC_CONFIG_DIR, MOCK_CONFIG_FILE_NAME);
-    if (!pathname)
-        return NULL;
-
-    keyfile =  gps_config_load(pathname);
-    g_free(pathname);
-
-    return keyfile;
-}
-
-int gps_config_save_file(GKeyFile *keyfile)
-{
-    int ret = 0;
-
-    gchar *pathname, *dirname;
-
-    dirname = g_strdup_printf("%s", LOC_CONFIG_DIR);
-    if (!dirname)
-        return -ENOMEM;
-
-    /* If the dir doesn't exist, create it */
-    if (!g_file_test(dirname, G_FILE_TEST_IS_DIR)) {
-        if (mkdir(dirname, MODE) < 0) {
-            if (errno != EEXIST) {
-                g_free(dirname);
-                return -errno;
-            }
-        }
-    }
-
-    pathname = g_strdup_printf("%s/%s", dirname, MOCK_CONFIG_FILE_NAME);
-
-    g_free(dirname);
-
-    ret = gps_config_save(keyfile, pathname);
-
-    g_free(pathname);
-
-    return ret;
 }
 
 #endif

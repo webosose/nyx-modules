@@ -407,7 +407,7 @@ nyx_error_t enable_mock(nyx_device_handle_t handle, int32_t enable)
         return NYX_ERROR_INVALID_HANDLE;
 
     //create file and write mock data
-    GKeyFile *keyfile = gps_config_open_file();
+    GKeyFile *keyfile = open_mock_conf_file(mock_conf_path_name);
     if (keyfile == NULL) {
         nyx_error("MSGID_NMEA_PARSER", 0, "mock file create/open failed");
         return NYX_ERROR_INCOMPATIBLE_LIBRARY;
@@ -415,7 +415,8 @@ nyx_error_t enable_mock(nyx_device_handle_t handle, int32_t enable)
 
     g_key_file_set_boolean(keyfile, GPS_MOCK_INFO, "MOCK", (bool)enable);
 
-    gps_config_save_file(keyfile);
+    if (!save_mock_conf_data(keyfile, mock_conf_path_name))
+        nyx_error("MSGID_NMEA_PARSER", 0, "mock file save failed");
 
     g_key_file_free(keyfile);
 
@@ -431,7 +432,7 @@ nyx_error_t set_mock_latency(nyx_device_handle_t handle, int32_t latency)
         return NYX_ERROR_INVALID_HANDLE;
 
     //set latency
-    GKeyFile *keyfile = gps_config_open_file();
+    GKeyFile *keyfile = open_mock_conf_file(mock_conf_path_name);
     if (keyfile == NULL) {
         nyx_error("MSGID_NMEA_PARSER", 0, "mock file create/open failed");
         return NYX_ERROR_INCOMPATIBLE_LIBRARY;
@@ -439,7 +440,8 @@ nyx_error_t set_mock_latency(nyx_device_handle_t handle, int32_t latency)
 
     g_key_file_set_integer(keyfile, GPS_MOCK_INFO, "LATENCY", latency);
 
-    gps_config_save_file(keyfile);
+    if(!save_mock_conf_data(keyfile, mock_conf_path_name))
+        nyx_error("MSGID_NMEA_PARSER", 0, "mock file save failed");
 
     g_key_file_free(keyfile);
 
@@ -457,7 +459,7 @@ nyx_error_t providers_query(nyx_device_handle_t handle, nyx_gps_providers_query_
         return NYX_ERROR_INVALID_HANDLE;
 
     //check mock enabled or not
-    GKeyFile *keyfile = gps_config_load_file();
+    GKeyFile *keyfile = load_mock_conf_file(mock_conf_path_name);
     if (keyfile) {
         bool value = g_key_file_get_boolean(keyfile, GPS_MOCK_INFO, "MOCK", NULL);
         if (!value) {
@@ -510,7 +512,7 @@ nyx_error_t start(nyx_device_handle_t handle)
         return NYX_ERROR_INVALID_HANDLE;
 
     //check mock enabled or not
-    GKeyFile *keyfile = gps_config_load_file();
+    GKeyFile *keyfile = load_mock_conf_file(mock_conf_path_name);
     if (!keyfile) {
         nyx_error("MSGID_NMEA_PARSER", 0, "mock config file loading failed");
         return NYX_ERROR_DEVICE_NOT_EXIST;
