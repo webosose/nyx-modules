@@ -23,6 +23,7 @@ set(WEBOS_DISTRO_RELEASE_CODENAME "(unknown)" CACHE STRING "Distribution release
 set(WEBOS_DISTRO_BUILD_ID unofficial CACHE STRING "Distribution build ID (build number with optional prefix)")
 set(WEBOS_DISTRO_MANUFACTURING_VERSION "(unknown)" CACHE STRING "Distribution manufacturing version")
 set(WEBOS_DISTRO_PRERELEASE "" CACHE STRING "Distribution prerelease")
+set(WEBOS_DISTRO_RELEASE_PLATFORMCODE "(unknown)" CACHE STRING "Distribution platform version code")
 
 # date sends its output to stderr for some reason, hence the redirection.
 execute_process(COMMAND bash -c "date -u +'%Y%m%d%H%M%S' 2>&1" OUTPUT_VARIABLE BUILD_TIME)

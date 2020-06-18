@@ -16,7 +16,7 @@
 
 /*
 *******************************************************************
-* @file os_info.c
+	* @file os_info.c
 *
 * @brief The OS_INFO module implementation.
 *******************************************************************
@@ -257,6 +257,10 @@ nyx_error_t os_info_query(nyx_device_handle_t d, nyx_os_info_query_t query,
 
 		case NYX_OS_INFO_WEBOS_API_VERSION:
 			*dest = "@WEBOS_DISTRO_API_VERSION@";
+			break;
+
+		case NYX_OS_INFO_WEBOS_RELEASE_PLATFORMCODE:
+			*dest = "@WEBOS_DISTRO_RELEASE_PLATFORMCODE@";
 			break;
 
 		case NYX_OS_INFO_WEBOS_NAME:
