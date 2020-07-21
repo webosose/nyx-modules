@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2020 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -56,6 +56,7 @@ nyx_error_t rsa_generate_key(int keylen, int *key_index)
 	return NYX_ERROR_NONE;
 
 error:
+        BN_free(bn);
 	rsa_destroy_key(rsa_key);
 	return NYX_ERROR_GENERIC;
 }

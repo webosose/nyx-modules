@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2020 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -155,7 +155,8 @@ static void keystore_save_rsakey(gpointer key, gpointer value,
 
 	gchar *index = g_strdup_printf("%d", key_index);
 	int pkcs_len = i2d_RSAPrivateKey(rsa_key->rsa, NULL);
-	unsigned char *pkcs_buf = malloc(pkcs_len);
+        g_assert(pkcs_len>0);
+	unsigned char *pkcs_buf = g_malloc(pkcs_len);
 	unsigned char *tmp = pkcs_buf;
 	i2d_RSAPrivateKey(rsa_key->rsa, &tmp);
 
@@ -168,7 +169,7 @@ static void keystore_save_rsakey(gpointer key, gpointer value,
 	g_key_file_set_string_list(key_file, "rsa", index, list, 2);
 
 	g_free(index);
-	free(pkcs_buf);
+	g_free(pkcs_buf);
 	g_free((gpointer)list[0]);
 	g_free((gpointer)list[1]);
 }
