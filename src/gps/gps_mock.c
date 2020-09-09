@@ -107,6 +107,7 @@ void gps_location_cb(GpsLocation* location)
         nyx_gps_location->speed = location->speed;
         nyx_gps_location->bearing = location->bearing;
         nyx_gps_location->accuracy = location->accuracy;
+        nyx_gps_location->vertical_accuracy = -1.0;
         nyx_gps_location->timestamp = (int64_t)location->timestamp;
     }
 
