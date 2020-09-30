@@ -56,6 +56,7 @@ private:
 ParserInotify::ParserInotify(std::string dirPath, ParserNmea* obj)
     : mDirPath(dirPath)
     , mWatchDescriptor(-1)
+    , mFileDescriptor(-1)
     , mChannel(nullptr)
     , mWatch(0)
     , mParserNmeaObj(obj) {
