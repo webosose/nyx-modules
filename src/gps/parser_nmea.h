@@ -23,6 +23,7 @@
 #define _PARSER_NMEA_H_
 
 #include <nmeaparser/NMEAParser.h>
+#include "gps_device.h"
 
 typedef struct {
     //for getLocationUpdates
@@ -49,6 +50,8 @@ public:
 
     void parserWatchCb(const char *ident);
 
+    CNMEAParserData::ERROR_E ProcessCommand(const char *pCmd, const char *pData, const char *checksum);
+
 private:
     FILE *mNmeaFp;
     uint64_t mSeekOffset;
@@ -58,12 +61,19 @@ private:
     ParserInotify* mParserInotifyObj;
 
     gps_data mGpsData;
+    GPSDevice mGpsDevice;
 
     ParserNmea();
     ~ParserNmea();
 
     void init();
     void deinit();
+
+    bool startMockFileParsing();
+    bool stopMockFileParsing();
+
+    bool startGpsDataParsing();
+    bool stopGpsDataParsing();
 
     void sendLocationUpdates();
     void sendNmeaUpdates(char * rawNmea);

@@ -176,11 +176,87 @@ void SetGpsStatus(int status)
     parser_status_cb(&gps_status, nullptr);
 }
 
+CNMEAParserData::ERROR_E ParserNmea::ProcessCommand(const char *pCmd, const char *pData, const char *checksum) {
+    // Call base class to process the command
+    CNMEAParser::ProcessRxCommand(const_cast<char*>(pCmd), const_cast<char*>(pData));
+    nyx_info("MSGID_NMEA_PARSER", 0, "Cmd: %s\nData: %s, checksum:%.2s\n", pCmd, pData, checksum);
+
+    bool nmeaDataParsed = false;
+    int len = strlen(pCmd) + strlen(pData) + 7;
+    char *nmea_data = (char *)malloc(len);
+    if (!nmea_data)
+        return CNMEAParserData::ERROR_FAIL;
+
+    snprintf(nmea_data, len, "$%.5s,%s*%.2s", pCmd, pData, checksum);
+    nyx_info("MSGID_NMEA_PARSER", 0, "nmea_data: %s\n", nmea_data);
+
+    // Check if this is the GPGGA command. If it is, then set gps location
+    if (strstr(pCmd, "GPGGA") != NULL) {
+        CNMEAParserData::GGA_DATA_T* ggaData =  (CNMEAParserData::GGA_DATA_T*)malloc(sizeof(CNMEAParserData::GGA_DATA_T));
+
+        if (!ggaData) {
+            free(nmea_data);
+            return CNMEAParserData::ERROR_FAIL;
+        }
+
+        if (GetGPGGA(*ggaData) == CNMEAParserData::ERROR_OK) {
+            nmeaDataParsed = true;
+            SetGpsGGA_Data(ggaData, nmea_data);
+        }
+    }
+    else if (strstr(pCmd, "GPGSV") != NULL) { //GPS GSV Data
+        CNMEAParserData::GSV_DATA_T* gsvData = (CNMEAParserData::GSV_DATA_T*)malloc(sizeof(CNMEAParserData::GSV_DATA_T));
+
+        if (!gsvData) {
+            free(nmea_data);
+            return CNMEAParserData::ERROR_FAIL;
+        }
+
+        if (GetGPGSV(*gsvData) == CNMEAParserData::ERROR_OK) {
+            nmeaDataParsed = true;
+            SetGpsGSV_Data(gsvData, nmea_data);
+         }
+    }
+    else if (strstr(pCmd, "GPGSA") != NULL) {
+        CNMEAParserData::GSA_DATA_T* gsaData = (CNMEAParserData::GSA_DATA_T*)malloc(sizeof(CNMEAParserData::GSA_DATA_T));
+
+        if (!gsaData) {
+            free(nmea_data);
+            return CNMEAParserData::ERROR_FAIL;
+        }
+
+        if (GetGPGSA(*gsaData) == CNMEAParserData::ERROR_OK) {
+            nmeaDataParsed = true;
+            SetGpsGSA_Data(gsaData, nmea_data);
+         }
+    }
+    else if (strstr(pCmd, "GPRMC") != NULL) {
+        CNMEAParserData::RMC_DATA_T* rmcData = (CNMEAParserData::RMC_DATA_T*)malloc(sizeof(CNMEAParserData::RMC_DATA_T));
+
+        if (!rmcData) {
+            free(nmea_data);
+            return CNMEAParserData::ERROR_FAIL;
+        }
+
+        if (GetGPRMC(*rmcData) == CNMEAParserData::ERROR_OK) {
+            nmeaDataParsed = true;
+            SetGpsRMC_Data(rmcData, nmea_data);
+         }
+    }
+
+    if ((nmeaDataParsed == false)  && nmea_data)
+            free(nmea_data);
+
+    return CNMEAParserData::ERROR_OK;
+}
+
+
 CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, char *checksum) {
     // Call base class to process the command
     CNMEAParser::ProcessRxCommand(pCmd, pData);
 
     nyx_debug("Cmd: %s\nData: %s, checksum:%.2s\n", pCmd, pData, checksum);
+
     bool nmeaDataParsed = false;
     int len = strlen(pCmd) + strlen(pData) + 7;
     char *nmea_data = (char *)malloc(len);
@@ -304,6 +380,38 @@ void ParserNmea::deinit() {
 
 bool ParserNmea::startParsing() {
     nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    mGpsDevice.init();
+    if (mGpsDevice.isGpsDevAvail())
+    	return startGpsDataParsing();
+    else
+    	return startMockFileParsing();
+}
+
+bool ParserNmea::startGpsDataParsing() {
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+
+    init();
+    SetGpsStatus(NYX_GPS_STATUS_SESSION_BEGIN);
+
+    return false;
+}
+
+bool ParserNmea::startMockFileParsing() {
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+
+    //check mock enabled or not
+    GKeyFile *keyfile = load_mock_conf_file(mock_conf_path_name);
+    if (!keyfile) {
+        nyx_error("MSGID_NMEA_PARSER", 0, "mock config file loading failed");
+        return false;
+    }
+
+    bool value = g_key_file_get_boolean(keyfile, GPS_MOCK_INFO, "MOCK", NULL);
+    if (!value) {
+        g_key_file_free(keyfile);
+        return false;
+    }
+
     mNmeaFp = fopen(nmea_complete_path.c_str(), "r");
     if (mNmeaFp == nullptr) {
         nyx_error("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d Could not open file: %s \n", __FUNCTION__, __LINE__, nmea_complete_path.c_str());
@@ -313,12 +421,6 @@ bool ParserNmea::startParsing() {
 
     init();
     SetGpsStatus(NYX_GPS_STATUS_SESSION_BEGIN);
-
-    GKeyFile *keyfile = load_mock_conf_file(mock_conf_path_name);
-    if (!keyfile) {
-        nyx_error("MSGID_NMEA_PARSER", 0, "mock config file not available \n");
-        return false;
-    }
 
     int latency, interval;
     latency = g_key_file_get_integer(keyfile, GPS_MOCK_INFO, "LATENCY", NULL);
@@ -368,14 +470,27 @@ bool ParserNmea::startParsing() {
     }
 
     nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
-    mParserInotifyObj->startWatch();
+    if (mParserInotifyObj)
+    	mParserInotifyObj->startWatch();
 
     return false;
 }
 
 bool ParserNmea::stopParsing() {
+    if (mGpsDevice.isGpsDevAvail())
+    	return stopGpsDataParsing();
+    else
+    	return stopMockFileParsing();
+}
+
+bool ParserNmea::stopGpsDataParsing() {
+    return mGpsDevice.deinit();
+}
+
+bool ParserNmea::stopMockFileParsing() {
     mSeekOffset = 0;
-    mParserInotifyObj->stopWatch();
+    if (mParserInotifyObj)
+    	mParserInotifyObj->stopWatch();
 
     if (mParserThreadPoolObj) {
         delete mParserThreadPoolObj;
@@ -403,6 +518,7 @@ void ParserNmea::parserWatchCb(const char *ident)
     if ((strlen(ident) != nmea_file_name.size()) || strncmp(ident, nmea_file_name.c_str(), nmea_file_name.size()) != 0)
         return;
 
-    mParserInotifyObj->stopWatch();
+    if (mParserInotifyObj)
+        mParserInotifyObj->stopWatch();
     startParsing();
 }

@@ -28,7 +28,7 @@
 #include "parser_interface.h"
 #include "gps_storage.h"
 
-NYX_DECLARE_MODULE(NYX_DEVICE_GPS, "GpsMock");
+NYX_DECLARE_MODULE(NYX_DEVICE_GPS, "Gps");
 
 typedef struct methodStringPair
 {
@@ -512,20 +512,6 @@ nyx_error_t start(nyx_device_handle_t handle)
     if (handle != nyx_dev)
         return NYX_ERROR_INVALID_HANDLE;
 
-    //check mock enabled or not
-    GKeyFile *keyfile = load_mock_conf_file(mock_conf_path_name);
-    if (!keyfile) {
-        nyx_error("MSGID_NMEA_PARSER", 0, "mock config file loading failed");
-        return NYX_ERROR_DEVICE_NOT_EXIST;
-    }
-
-    bool value = g_key_file_get_boolean(keyfile, GPS_MOCK_INFO, "MOCK", NULL);
-    if (!value) {
-        g_key_file_free(keyfile);
-        return NYX_ERROR_DEVICE_NOT_EXIST;
-    }
-
-    g_key_file_free(keyfile);
 
     if (!pGpsInterface || pGpsInterface->start() != 0)
         return NYX_ERROR_DEVICE_UNAVAILABLE;
