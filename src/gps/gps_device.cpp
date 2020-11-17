@@ -23,6 +23,11 @@ GPSDevice::GPSDevice()
     , mInit(false)
     , mReadChannel(nullptr)
 {
+    if (!mConfig.init(GPS_CONFIG_FILE))
+        mPort = DEVICE_DEFAULT_PORT;
+    else
+        mPort = mConfig.getValue("port");
+
     init();
 }
 
@@ -106,7 +111,7 @@ bool GPSDevice::init() {
         mInit = true;
         struct termios tty;
         memset(&tty, 0, sizeof(termios));
-        if ((mFd = open(DEVICE_PORT, O_RDONLY | O_NOCTTY | O_NONBLOCK )) != -1)
+        if ((mFd = open(mPort.c_str(), O_RDONLY | O_NOCTTY | O_NONBLOCK )) != -1)
         {
             tty.c_iflag = 0;
             tty.c_cflag |= CLOCAL | CREAD;
@@ -130,7 +135,7 @@ bool GPSDevice::init() {
         else
         {
             mInit = false;
-            nyx_info("MSGID_NMEA_PARSER", 0,  "%s open failed", DEVICE_PORT);
+            nyx_info("MSGID_NMEA_PARSER", 0,  "%s open failed", mPort.c_str());
             return false;
         }
     }

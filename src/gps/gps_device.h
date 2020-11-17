@@ -29,9 +29,10 @@
 #include <sys/ioctl.h>
 #include <errno.h>
 #include <gio/gio.h>
-//#include <gio/gunixfdlist.h>
+#include "gps_config.h"
 
-constexpr char DEVICE_PORT[] = "/dev/ttyUSB0";
+constexpr char GPS_CONFIG_FILE[] = "/etc/location/gpsConfig.conf";
+constexpr char DEVICE_DEFAULT_PORT[] = "/dev/ttyUSB0";
 constexpr int INVALID_FD = -1;
 constexpr int MAX_BUFFER_SIZE = 1024;
 
@@ -50,8 +51,11 @@ private:
     int mFd;
     bool mInit;
     GIOChannel* mReadChannel;
+    GPSConfig mConfig;
     std::string mData;
+    std::string mPort;
     void handleGpsData();
 };
 
 #endif /* GPSDEVICE_H_ */
+
