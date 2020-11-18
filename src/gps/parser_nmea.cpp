@@ -156,7 +156,6 @@ bool ParserNmea::SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T* rmcData, char *nmea
 */
     mGpsData.latitude = rmcData->m_dLatitude;
     mGpsData.longitude = rmcData->m_dLongitude;
-    mGpsData.altitude = rmcData->m_dAltitudeMSL;
     mGpsData.speed = rmcData->m_dSpeedKnots*0.514;
     mGpsData.direction = rmcData->m_dTrackAngle;
 
