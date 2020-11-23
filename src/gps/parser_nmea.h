@@ -45,6 +45,7 @@ public:
 
     static ParserNmea* getInstance();
 
+    bool initParsingModule();
     bool startParsing();
     bool stopParsing();
 

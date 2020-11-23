@@ -377,9 +377,38 @@ void ParserNmea::deinit() {
     memset(&mGpsData, 0, sizeof(mGpsData));
 }
 
-bool ParserNmea::startParsing() {
+bool ParserNmea::initParsingModule() {
     nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
     mGpsDevice.init();
+    if (!mGpsDevice.isGpsDevAvail())
+    {
+        //check mock enabled or not
+        GKeyFile *keyfile = load_mock_conf_file(mock_conf_path_name);
+        if (!keyfile) {
+            nyx_error("MSGID_NMEA_PARSER", 0, "mock config file loading failed");
+            return false;
+        }
+
+        bool value = g_key_file_get_boolean(keyfile, GPS_MOCK_INFO, "MOCK", NULL);
+        if (!value) {
+            g_key_file_free(keyfile);
+            return false;
+        }
+
+        g_key_file_free(keyfile);
+
+        mNmeaFp = fopen(nmea_complete_path.c_str(), "r");
+        if (mNmeaFp == nullptr) {
+            nyx_error("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d Could not open file: %s \n", __FUNCTION__, __LINE__, nmea_complete_path.c_str());
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool ParserNmea::startParsing() {
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
     if (mGpsDevice.isGpsDevAvail())
     	return startGpsDataParsing();
     else
@@ -398,28 +427,14 @@ bool ParserNmea::startGpsDataParsing() {
 bool ParserNmea::startMockFileParsing() {
     nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
 
-    //check mock enabled or not
-    GKeyFile *keyfile = load_mock_conf_file(mock_conf_path_name);
-    if (!keyfile) {
-        nyx_error("MSGID_NMEA_PARSER", 0, "mock config file loading failed");
-        return false;
-    }
-
-    bool value = g_key_file_get_boolean(keyfile, GPS_MOCK_INFO, "MOCK", NULL);
-    if (!value) {
-        g_key_file_free(keyfile);
-        return false;
-    }
-
-    mNmeaFp = fopen(nmea_complete_path.c_str(), "r");
-    if (mNmeaFp == nullptr) {
-        nyx_error("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d Could not open file: %s \n", __FUNCTION__, __LINE__, nmea_complete_path.c_str());
-        return false;
-    }
-    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
-
     init();
     SetGpsStatus(NYX_GPS_STATUS_SESSION_BEGIN);
+
+    GKeyFile *keyfile = load_mock_conf_file(mock_conf_path_name);
+    if (!keyfile) {
+         nyx_error("MSGID_NMEA_PARSER", 0, "mock config file not available \n");
+         return false;
+    }
 
     int latency, interval;
     latency = g_key_file_get_integer(keyfile, GPS_MOCK_INFO, "LATENCY", NULL);

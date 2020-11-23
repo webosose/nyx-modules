@@ -114,6 +114,10 @@ static int loc_init(GpsCallbacks* callbacks)
 }
 
 static int  loc_start() {
+    if (!parserNmeaObj->initParsingModule())
+    {
+        return -1;
+    }
     parserThreadPoolObj->enqueue(&startParsing);
     return 0;
 }
