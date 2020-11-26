@@ -15,40 +15,44 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <nyx/module/nyx_log.h>
-#include <pbnjson.hpp>
 #include "gps_config.h"
 
-GPSConfig::GPSConfig() : mIsInit(false)
+GPSConfig::GPSConfig() : mGPSConfig(false), mRoot(0)
 {
 }
 
-GPSConfig::GPSConfig(const std::string &fileName) : mIsInit(false)
+GPSConfig::GPSConfig(const std::string &fileName) : mGPSConfig(false), mRoot(0)
 {
-    init(fileName);
+    loadGPSConfig(fileName);
 }
 
-bool GPSConfig::init(const std::string &fileName)
+bool GPSConfig::loadGPSConfig(const std::string &fileName)
 {
-    if (!mIsInit)
+    if (!isGPSConfigured())
     {
         mRoot = pbnjson::JDomParser::fromFile(fileName.c_str());
-        if (!mRoot.isValid() || mRoot.isNull())
-            mIsInit = false;
+        if (mRoot.isValid() && !mRoot.isNull())
+        {
+            mGPSConfig = true;
+            nyx_info("MSGID_GPS_CONFIG", 0, "GPS conf file:%s load success\n", fileName.c_str());
+        }
         else
-            mIsInit = true;
+        {
+            nyx_error("MSGID_GPS_CONFIG", 0, "GPS conf file:%s load failed\n", fileName.c_str());
+        }
     }
-    return mIsInit;
+    return mGPSConfig;
 }
 
-bool GPSConfig::isInitialized()
+bool GPSConfig::isGPSConfigured()
 {
-    return mIsInit;
+    return mGPSConfig;
 }
 
 std::string GPSConfig::getValue(const std::string &prop)
 {
     std::string propVal;
-    if (mIsInit && mRoot.hasKey(prop))
+    if (mGPSConfig && mRoot.hasKey(prop))
     {
         propVal = mRoot[prop.c_str()].asString();
     }
@@ -57,5 +61,6 @@ std::string GPSConfig::getValue(const std::string &prop)
 
 GPSConfig::~GPSConfig()
 {
+    mGPSConfig = false;
+    mRoot = 0;
 }
-

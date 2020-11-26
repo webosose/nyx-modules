@@ -36,26 +36,35 @@ constexpr char DEVICE_DEFAULT_PORT[] = "/dev/ttyUSB0";
 constexpr int INVALID_FD = -1;
 constexpr int MAX_BUFFER_SIZE = 1024;
 
-class GPSDevice {
+class GPSDevice
+{
 public:
     GPSDevice();
     ~GPSDevice();
 
+    static GPSDevice *getInstance();
     bool isGpsDevAvail();
     bool init();
     bool deinit();
+    void gpsDeviceDestroyed();
+    gboolean readGpsData(GIOChannel *, GIOCondition);
+    static gboolean ioCallback(GIOChannel *, GIOCondition, gpointer);
 
-    gboolean readGpsData(GIOChannel*, GIOCondition);
-    static gboolean ioCallback(GIOChannel*, GIOCondition, gpointer);
 private:
+
     int mFd;
-    bool mInit;
-    GIOChannel* mReadChannel;
-    GPSConfig mConfig;
+    bool mGpsDevAvail;
+    GIOChannel *mReadChannel;
+    guint mIoWatchId;
+    GPSConfig mGPSConfig;
     std::string mData;
     std::string mPort;
     void handleGpsData();
+
+    bool openPort();
+    void setReadChannel();
+    void configGPSDevicePort();
+
 };
 
 #endif /* GPSDEVICE_H_ */
-

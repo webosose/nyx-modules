@@ -19,17 +19,18 @@
 
 #include <pbnjson.hpp>
 
-class GPSConfig {
+class GPSConfig
+{
 public:
     GPSConfig();
     GPSConfig(const std::string &fileName);
     ~GPSConfig();
-    bool isInitialized();
-    bool init(const std::string &fileName);
+    bool isGPSConfigured();
+    bool loadGPSConfig(const std::string &fileName);
     std::string getValue(const std::string &prop);
 
 private:
-    bool mIsInit;
+    bool mGPSConfig;
     pbnjson::JValue mRoot;
 };
 
