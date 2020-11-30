@@ -25,5 +25,5 @@ include_directories(${NMEAPARSER_INCLUDE_DIRS})
 webos_add_compiler_flags(ALL ${NMEAPARSER_CFLAGS_OTHER})
 
 webos_build_nyx_module(GpsMain
-                       SOURCES gps.c parser_interface.cpp parser_nmea.cpp gps_device.cpp gps_config.cpp
+                       SOURCES gps.c parser_interface.cpp parser_nmea.cpp gps_device.cpp parser_mock.cpp parser_hw.cpp
                        LIBRARIES ${MODULE_LIBRARIES} ${PMLOG_LDFLAGS} ${NYXLIB_LDFLAGS} ${NMEAPARSER_LDFLAGS} ${GLIB2_LDFLAGS} ${PBNJSON_CXX_LDFLAGS} -lrt -lpthread -lNMEAParserLib)

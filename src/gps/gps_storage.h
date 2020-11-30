@@ -30,13 +30,13 @@
 #define DEFAULT_LATENCY       2
 static const char* mock_conf_path_name = "/etc/location/mock.conf";
 
-static GKeyFile *load_mock_conf_file(const char *file_path_name)
+static GKeyFile *load_conf_file(const char *file_path_name)
 {
     GError *error = NULL;
     GKeyFile *keyfile = g_key_file_new();
 
     if (!g_key_file_load_from_file(keyfile, file_path_name, G_KEY_FILE_NONE, &error)) {
-        nyx_error("MSGID_NMEA_PARSER", 0, "Mock conf file load failed %s: %s\n", file_path_name, error->message);
+        nyx_error("MSGID_GPS_STORAGE", 0, "file: %s  load failed: %s\n", file_path_name, error->message);
         g_clear_error(&error);
 
         g_key_file_free(keyfile);
@@ -46,7 +46,7 @@ static GKeyFile *load_mock_conf_file(const char *file_path_name)
     return keyfile;
 }
 
-bool save_mock_conf_data(GKeyFile *keyfile, const char *file_path_name)
+static bool save_conf_data(GKeyFile *keyfile, const char *file_path_name)
 {
     gsize dataStringLen = 0;
     GError *error = NULL;
@@ -55,7 +55,7 @@ bool save_mock_conf_data(GKeyFile *keyfile, const char *file_path_name)
     gchar *dataString = g_key_file_to_data(keyfile, &dataStringLen, NULL);
 
     if (!g_file_set_contents(file_path_name, dataString, dataStringLen, &error)) {
-        nyx_error("MSGID_NMEA_PARSER", 0, "Mock conf file save failed: %s\n", error->message);
+        nyx_error("MSGID_GPS_STORAGE", 0, "file: %s  save failed: %s\n", file_path_name, error->message);
         g_error_free(error);
         ret = false;
     }
@@ -65,9 +65,9 @@ bool save_mock_conf_data(GKeyFile *keyfile, const char *file_path_name)
     return ret;
 }
 
-GKeyFile *open_mock_conf_file(const char* file_path_name)
+static GKeyFile *open_conf_file(const char *file_path_name)
 {
-    GKeyFile *keyfile =  load_mock_conf_file(file_path_name);
+    GKeyFile *keyfile = load_conf_file(file_path_name);
 
     if (!keyfile)
         keyfile = g_key_file_new();

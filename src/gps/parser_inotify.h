@@ -27,15 +27,15 @@
 
 #include <nyx/module/nyx_log.h>
 
-#include "parser_nmea.h"
+#include "parser_mock.h"
 
 #ifndef _PARSER_INOTIFY_H_
 #define _PARSER_INOTIFY_H_
 
-
-class ParserInotify {
+class ParserInotify
+{
 public:
-    ParserInotify(std::string dirPath, ParserNmea* obj);
+    ParserInotify(std::string dirPath, ParserMock *obj);
     ~ParserInotify();
 
     bool startWatch();
@@ -48,18 +48,18 @@ private:
     GIOChannel *mChannel;
     uint mWatch;
 
-    ParserNmea* mParserNmeaObj;
+    ParserMock *mParserMockObj;
 
     static gboolean watch_cb(GIOChannel *source, GIOCondition condition, gpointer data);
 };
 
-ParserInotify::ParserInotify(std::string dirPath, ParserNmea* obj)
+ParserInotify::ParserInotify(std::string dirPath, ParserMock* obj)
     : mDirPath(dirPath)
     , mWatchDescriptor(-1)
     , mFileDescriptor(-1)
     , mChannel(nullptr)
     , mWatch(0)
-    , mParserNmeaObj(obj) {
+    , mParserMockObj(obj) {
 }
 
 ParserInotify::~ParserInotify() {
@@ -96,7 +96,7 @@ gboolean ParserInotify::watch_cb(GIOChannel *source, GIOCondition condition, gpo
         nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
         if ((event->mask & IN_MODIFY) && fileName) {
             nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
-            parserInotifyObj->mParserNmeaObj->parserWatchCb(fileName);
+            parserInotifyObj->mParserMockObj->parserWatchCb(fileName);
         }
     }
     nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);

@@ -1,28 +1,38 @@
-// Copyright (c) 2020 LG Electronics, Inc.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
-// SPDX-License-Identifier: Apache-2.0
+/* @@@LICENSE
+ * *
+ * * Copyright (c) 2020 LG Electronics, Inc.
+ * *
+ * * Licensed under the Apache License, Version 2.0 (the "License");
+ * * you may not use this file except in compliance with the License.
+ * * You may obtain a copy of the License at
+ * *
+ * * http://www.apache.org/licenses/LICENSE-2.0
+ * *
+ * * Unless required by applicable law or agreed to in writing, software
+ * * distributed under the License is distributed on an "AS IS" BASIS,
+ * * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * * See the License for the specific language governing permissions and
+ * * limitations under the License.
+ * * SPDX-License-Identifier: Apache-2.0
+ * *
+ * * Author(s)    : Ashish Patel
+ * * Email ID.    : ashish23.patel@lge.com
+ * * LICENSE@@@ */
+
+/*
+ * *******************************************************************/
 
 #include <nyx/module/nyx_log.h>
 #include "gps_device.h"
-#include "parser_nmea.h"
+#include "gps_storage.h"
 
 GPSDevice::GPSDevice()
     : mFd(INVALID_FD)
     , mGpsDevAvail(false)
+    , mGPSConfig(false)
     , mReadChannel(nullptr)
     , mIoWatchId(0)
+    , mKeyfile(nullptr)
 {
 }
 
@@ -54,29 +64,14 @@ bool GPSDevice::isGpsDevAvail()
 
 void GPSDevice::handleGpsData()
 {
-    std::string cmd;
-    std::string chsum;
-    std::string gpsData;
-    nyx_info("GPS_DEVICE", 0, "%s", __FUNCTION__);
-    if (!mData.empty() && mData.find(",") != std::string::npos)
-    {
-        cmd = mData.substr(1, mData.find(",") - 1);
-    }
-    nyx_debug("GPS_DEVICE : %s -> Len:%zu cmd: [%s]", __FUNCTION__, cmd.size(), cmd.c_str());
+    CNMEAParserData::ERROR_E nErr;
+
     if (!mData.empty() && mData.find("\r") != std::string::npos)
     {
-        std::string recvData = mData.replace(mData.find("\r"), mData.size(), "");
-        nyx_debug("GPS_DEVICE : %s -> Len:%zu recvData: [%s]", __FUNCTION__, recvData.size(), recvData.c_str());
-        if (!recvData.empty() && recvData.find("*") != std::string::npos)
+        std::string recvData = mData.replace(mData.find("\r"), mData.length(), "");
+        if ((nErr = CNMEAParser::ProcessNMEABuffer(const_cast<char *>(recvData.c_str()), recvData.length())) != CNMEAParserData::ERROR_OK)
         {
-            int removeStarPosition = recvData.find("*");
-            int removeCommaPosition = recvData.find(",");
-            chsum = recvData.substr(removeStarPosition + 1);
-            gpsData = recvData.substr(removeCommaPosition + 1);
-            nyx_debug("GPS_DEVICE : %s -> Len:%zu chsum: [%s]", __FUNCTION__, chsum.size(), chsum.c_str());
-            gpsData = gpsData.substr(0, gpsData.find("*"));
-            nyx_debug("GPS_DEVICE : %s -> Len:%zu gpsData: [%s]", __FUNCTION__, gpsData.size(), gpsData.c_str());
-            ParserNmea::getInstance()->ProcessCommand((cmd.c_str()),(gpsData.c_str()), (chsum.c_str()));
+            nyx_error("GPS_DEVICE", 0, "ProcessNMEABuffer failed, error: %d \n", nErr);
         }
     }
 }
@@ -94,7 +89,7 @@ gboolean GPSDevice::readGpsData(GIOChannel *io, GIOCondition condition)
         mData += temp;
         if (!mData.empty() && mData.find("\n") != std::string::npos)
         {
-            nyx_debug("GPS_DEVICE : %s before mData:[%s]", __FUNCTION__, mData.c_str());
+            nyx_debug("GPS_DEVICE : %s received gps data:[%s]", __FUNCTION__, mData.c_str());
             handleGpsData();
             mData.clear();
         }
@@ -130,7 +125,7 @@ bool GPSDevice::openPort()
         cfmakeraw(&tty);
         tcsetattr(mFd, TCSANOW, &tty);
         openPort = true;
-        nyx_info("GPS_DEVICE", 0,  "%s Port Open Success", mPort.c_str());
+        nyx_info("GPS_DEVICE", 0, "%s Port Open Success", mPort.c_str());
     }
     else
     {
@@ -172,8 +167,8 @@ void GPSDevice::gpsDeviceDestroyed()
 void GPSDevice::configGPSDevicePort()
 {
 
-    if (mGPSConfig.loadGPSConfig(GPS_CONFIG_FILE) && mGPSConfig.isGPSConfigured())
-        mPort = mGPSConfig.getValue("port");
+    if (loadGPSConfig(GPS_CONFIG_FILE))
+        mPort = getValue("PORT");
     else
         mPort = DEVICE_DEFAULT_PORT;
 }
@@ -209,6 +204,51 @@ bool GPSDevice::deinit()
     mFd = INVALID_FD;
     mData.clear();
     mGpsDevAvail = false;
-
+    mIoWatchId = 0;
     return true;
+}
+
+bool GPSDevice::loadGPSConfig(const std::string &fileName)
+{
+
+    mKeyfile = load_conf_file(fileName.c_str());
+    if (mKeyfile)
+    {
+        mGPSConfig = true;
+        nyx_info("MSGID_GPS_CONFIG", 0, "GPS conf file:%s loading success\n", fileName.c_str());
+    }
+    else
+    {
+        mGPSConfig = false;
+        nyx_error("MSGID_GPS_CONFIG", 0, "GPS conf file:%s load failed\n", fileName.c_str());
+    }
+
+    return mGPSConfig;
+}
+
+bool GPSDevice::isGPSConfigured()
+{
+    return mGPSConfig;
+}
+
+std::string GPSDevice::getValue(const std::string &key)
+{
+
+    std::string data;
+    if (mKeyfile)
+    {
+        gchar *value = g_key_file_get_string(mKeyfile, GPS_DEVICE_INFO, key.c_str(), NULL);
+        if (!value)
+        {
+            nyx_error("MSGID_GPS_CONFIG", 0, "key:%s not present\n", key.c_str());
+            return data;
+        }
+        data = value;
+    }
+    else
+    {
+        nyx_error("MSGID_GPS_CONFIG", 0, "GPS conf file not present\n");
+    }
+
+    return data;
 }
