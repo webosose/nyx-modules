@@ -26,9 +26,9 @@
 #define _PARSER_HW_H_
 
 #include <nmeaparser/NMEAParser.h>
-#include "gps_device.h"
 
 class GPSDevice;
+class ParserThreadPool;
 
 class ParserHW
 {
@@ -40,9 +40,14 @@ public:
     bool deinit();
     bool startParsing();
     bool stopParsing();
-
+    bool isSourcePresent();
+    bool isParserRequested() const { return mParserRequested; }
+    ParserThreadPool* getThreadPoolObj() const { return mParserThreadPoolObj; }
 private:
     GPSDevice *mGPSDeviceObj;
+    bool createThreadPool();
+    bool mParserRequested;
+    ParserThreadPool *mParserThreadPoolObj;
 };
 
 #endif // end _PARSER_HW_H_

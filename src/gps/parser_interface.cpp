@@ -114,10 +114,10 @@ static int loc_init(GpsCallbacks* callbacks)
 }
 
 static int  loc_start() {
-    if (!parserNmeaObj->initParsingModule())
-    {
+
+    if (parserNmeaObj && !parserNmeaObj->initParsingModule())
         return -1;
-    }
+
     parserThreadPoolObj->enqueue(&startParsing);
     return 0;
 }
@@ -153,7 +153,11 @@ bool stopParsing() {
     parsing_engine_on = false;
 
     if (parserNmeaObj)
-        return parserNmeaObj->stopParsing();
+    {
+        bool stop = parserNmeaObj->stopParsing();
+        parserNmeaObj->deinitParsingModule();
+        return stop;
+    }
    return false;
 }
 

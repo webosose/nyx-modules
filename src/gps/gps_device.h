@@ -55,14 +55,10 @@ public:
     bool isGpsDevAvail();
     bool init();
     bool deinit();
-    void gpsDeviceDestroyed();
-    gboolean readGpsData(GIOChannel *, GIOCondition);
-    static gboolean ioCallback(GIOChannel *, GIOCondition, gpointer);
 
 private:
     int mFd;
     bool mGpsDevAvail;
-    bool mGPSConfig;
     GKeyFile *mKeyfile;
     GIOChannel *mReadChannel;
     guint mIoWatchId;
@@ -75,6 +71,9 @@ private:
     bool openPort();
     void setReadChannel();
     void configGPSDevicePort();
+    void gpsDeviceDestroyed();
+    gboolean readGpsData(GIOChannel *, GIOCondition);
+    static gboolean ioCallback(GIOChannel *, GIOCondition, gpointer);
 };
 
 #endif /* GPSDEVICE_H_ */

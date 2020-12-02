@@ -23,7 +23,6 @@
  * *******************************************************************/
 
 #include "parser_hw.h"
-#include "parser_nmea.h"
 #include <nyx/common/nyx_gps_common.h>
 #include <cstring>
 #include <sys/time.h>
@@ -31,14 +30,23 @@
 #include <time.h>
 
 #include <nyx/module/nyx_log.h>
+#include "parser_thread_pool.h"
+#include "gps_device.h"
 
 ParserHW::ParserHW()
+  : mParserThreadPoolObj(nullptr)
+  , mParserRequested(false)
 {
     mGPSDeviceObj = GPSDevice::getInstance();
 }
 
 ParserHW::~ParserHW()
 {
+    if (mParserThreadPoolObj)
+    {
+        delete mParserThreadPoolObj;
+        mParserThreadPoolObj = nullptr;
+    }
 }
 ParserHW *ParserHW::getInstance()
 {
@@ -48,27 +56,59 @@ ParserHW *ParserHW::getInstance()
 
 bool ParserHW::init()
 {
-  return mGPSDeviceObj->init();
+
+    if(!mGPSDeviceObj->init())
+      return false;
+
+    mParserRequested = isSourcePresent();
+    createThreadPool();
+    return true;
+}
+
+bool ParserHW::isSourcePresent()
+{
+    return mGPSDeviceObj->isGpsDevAvail();
 }
 
 bool ParserHW::deinit()
 {
+    mParserRequested = false;
     return mGPSDeviceObj->isGpsDevAvail()?mGPSDeviceObj->deinit():false;
+
 }
 
 bool ParserHW::startParsing()
 {
-    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
-    if (init())
+    nyx_info("MSGID_NMEA_PARSER_HW", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    if (isSourcePresent())
+    {
+        createThreadPool();
         SetGpsStatus(NYX_GPS_STATUS_SESSION_BEGIN);
-
+    }
     return false;
 }
 
 bool ParserHW::stopParsing()
 {
-    if (deinit())
-        SetGpsStatus(NYX_GPS_STATUS_SESSION_END);
+    SetGpsStatus(NYX_GPS_STATUS_SESSION_END);
 
+    if (mParserThreadPoolObj)
+    {
+        delete mParserThreadPoolObj;
+        mParserThreadPoolObj = nullptr;
+    }
     return false;
+}
+
+bool ParserHW::createThreadPool()
+{
+    if (!mParserThreadPoolObj)
+    {
+        unsigned int interval = 0;
+        mParserThreadPoolObj = new ParserThreadPool(1, interval);
+        if(!mParserThreadPoolObj)
+          return false;
+        nyx_info("MSGID_NMEA_PARSER_HW", 0, "Created HW ThreadPool with interval: %d \n", interval);
+    }
+    return true;
 }

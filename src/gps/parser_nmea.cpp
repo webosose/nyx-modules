@@ -30,7 +30,7 @@
 #include <time.h>
 
 #include <nyx/module/nyx_log.h>
-
+#include "parser_thread_pool.h"
 #include "parser_interface.h"
 #include "parser_mock.h"
 #include "parser_hw.h"
@@ -189,8 +189,16 @@ CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, c
     // Call base class to process the command
     CNMEAParser::ProcessRxCommand(pCmd, pData);
 
-    nyx_debug("Cmd: %s\nData: %s, checksum:%.2s\n", pCmd, pData, checksum);
+    ParserThreadPool* parserThreadPoolObj = ParserHW::getInstance()->getThreadPoolObj();
+    if (ParserMock::getInstance()->isParserRequested())
+    {
+      parserThreadPoolObj = ParserMock::getInstance()->getThreadPoolObj();
+    }
 
+    if(!parserThreadPoolObj)
+        return CNMEAParserData::ERROR_OK;
+
+    nyx_info("MSGID_NMEA_PARSER", 0, "Cmd: %s Data: %s, checksum:%.2s\n", pCmd, pData, checksum);
     bool nmeaDataParsed = false;
     int len = strlen(pCmd) + strlen(pData) + 7;
     char *nmea_data = (char *)malloc(len);
@@ -210,7 +218,9 @@ CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, c
 
         if (GetGPGGA(*ggaData) == CNMEAParserData::ERROR_OK) {
             nmeaDataParsed = true;
-            SetGpsGGA_Data(ggaData, nmea_data);
+            parserThreadPoolObj->enqueue([=](){
+                SetGpsGGA_Data(ggaData, nmea_data);
+            });
         }
     }
     else if (strstr(pCmd, "GPGSV") != NULL) { //GPS GSV Data
@@ -223,9 +233,10 @@ CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, c
 
         if (GetGPGSV(*gsvData) == CNMEAParserData::ERROR_OK) {
             nmeaDataParsed = true;
-            SetGpsGSV_Data(gsvData, nmea_data);
-
-         }
+            parserThreadPoolObj->enqueue([=](){
+                SetGpsGSV_Data(gsvData, nmea_data);
+            });
+           }
     }
     else if (strstr(pCmd, "GPGSA") != NULL) {
         CNMEAParserData::GSA_DATA_T* gsaData = (CNMEAParserData::GSA_DATA_T*)malloc(sizeof(CNMEAParserData::GSA_DATA_T));
@@ -237,8 +248,9 @@ CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, c
 
         if (GetGPGSA(*gsaData) == CNMEAParserData::ERROR_OK) {
             nmeaDataParsed = true;
-            SetGpsGSA_Data(gsaData, nmea_data);
-
+            parserThreadPoolObj->enqueue([=](){
+                SetGpsGSA_Data(gsaData, nmea_data);
+            });
          }
     }
     else if (strstr(pCmd, "GPRMC") != NULL) {
@@ -251,8 +263,9 @@ CNMEAParserData::ERROR_E ParserNmea::ProcessRxCommand(char *pCmd, char *pData, c
 
         if (GetGPRMC(*rmcData) == CNMEAParserData::ERROR_OK) {
             nmeaDataParsed = true;
-            SetGpsRMC_Data(rmcData, nmea_data);
-
+            parserThreadPoolObj->enqueue([=](){
+                SetGpsRMC_Data(rmcData, nmea_data);
+            });
          }
     }
 
@@ -283,27 +296,47 @@ void ParserNmea::deinit() {
     ResetData();
     memset(&mGpsData, 0, sizeof(mGpsData));
 }
+
 bool ParserNmea::initParsingModule() {
-  nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
-  return ParserHW::getInstance()->init()?ParserHW::getInstance()->deinit():ParserMock::getInstance()->isMockEnabled();
+
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    init();
+    if (ParserMock::getInstance()->init())
+    {
+        return ParserMock::getInstance()->isSourcePresent();
+    }
+    return ParserHW::getInstance()->init();
+}
+
+bool ParserNmea::deinitParsingModule() {
+
+    nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+    deinit();
+    if (ParserMock::getInstance()->isParserRequested())
+    {
+        return ParserMock::getInstance()->deinit();
+    }
+    return ParserHW::getInstance()->deinit();
 }
 
 bool ParserNmea::startParsing()
 {
     nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
-    init();
-    if (ParserMock::getInstance()->isMockEnabled())
+
+    if (ParserMock::getInstance()->isParserRequested())
+    {
         return ParserMock::getInstance()->startParsing();
-    else
-        return ParserHW::getInstance()->startParsing();
+    }
+    return ParserHW::getInstance()->startParsing();
 }
 
 bool ParserNmea::stopParsing()
 {
     nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
-    deinit();
-    if (ParserMock::getInstance()->isMockEnabled())
-        return ParserMock::getInstance()->stopParsing();
-    else
-        return ParserHW::getInstance()->stopParsing();
+
+    if (ParserMock::getInstance()->isParserRequested())
+    {
+      return ParserMock::getInstance()->stopParsing();
+    }
+    return ParserHW::getInstance()->stopParsing();
 }

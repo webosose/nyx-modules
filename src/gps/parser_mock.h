@@ -29,25 +29,30 @@
 #include "parser_nmea.h"
 
 class ParserInotify;
-
+class ParserThreadPool;
 class ParserMock : public ParserNmea
 {
 public:
     void parserWatchCb(const char *ident);
     static ParserMock *getInstance();
+    bool init();
+    bool deinit();
     bool startParsing();
     bool stopParsing();
-
-    bool isMockEnabled();
-    int getMockLatency();
-
+    bool isSourcePresent();
+    bool isParserRequested() const { return mParserRequested; }
+    ParserThreadPool* getThreadPoolObj() const { return mParserThreadPoolObj; }
 private:
     ParserMock();
     ~ParserMock();
+    bool isMockEnabled();
+    int getMockLatency();
+    bool createThreadPool();
     FILE *mNmeaFp;
     uint64_t mSeekOffset;
-
+    ParserThreadPool* mParserThreadPoolObj;
     bool mStopParser;
+    bool mParserRequested;
     ParserInotify *mParserInotifyObj;
 };
 

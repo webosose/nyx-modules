@@ -25,18 +25,22 @@
 #include <time.h>
 
 #include <nyx/module/nyx_log.h>
-
+#include "parser_thread_pool.h"
 #include "gps_storage.h"
 #include "parser_inotify.h"
 #include "parser_interface.h"
-#include "parser_thread_pool.h"
 
 const std::string nmea_file_path = "/media/internal/location";
 const std::string nmea_file_name = "gps.nmea";
 const std::string nmea_complete_path = nmea_file_path + "/" + nmea_file_name;
 
 ParserMock::ParserMock()
-    : mNmeaFp(nullptr), mSeekOffset(0), mStopParser(false), mParserInotifyObj(nullptr)
+    : mNmeaFp(nullptr)
+    , mSeekOffset(0)
+    , mStopParser(false)
+    , mParserInotifyObj(nullptr)
+    , mParserThreadPoolObj(nullptr)
+    , mParserRequested(false)
 {
 
     mParserInotifyObj = new ParserInotify(nmea_file_path, this);
@@ -55,12 +59,42 @@ ParserMock::~ParserMock()
         delete mParserInotifyObj;
         mParserInotifyObj = nullptr;
     }
+
+    if (mParserThreadPoolObj)
+    {
+        delete mParserThreadPoolObj;
+        mParserThreadPoolObj = nullptr;
+    }
 }
 
 ParserMock *ParserMock::getInstance()
 {
     static ParserMock parserMockObj;
     return &parserMockObj;
+}
+
+bool ParserMock::init()
+{
+
+    if(!isMockEnabled())
+      return false;
+
+    mParserRequested = isSourcePresent();
+    createThreadPool();
+
+    return true;
+}
+
+bool ParserMock::deinit()
+{
+    mParserRequested = false;
+
+    if (mParserThreadPoolObj)
+    {
+        delete mParserThreadPoolObj;
+        mParserThreadPoolObj = nullptr;
+    }
+    return true;
 }
 
 bool ParserMock::isMockEnabled()
@@ -84,6 +118,38 @@ bool ParserMock::isMockEnabled()
     return true;
 }
 
+bool ParserMock::isSourcePresent()
+{
+    FILE *fp = fopen(nmea_complete_path.c_str(), "r");
+    if (fp == nullptr)
+    {
+        nyx_error("MSGID_NMEA_PARSER_MOCK", 0, "Fun: %s, Line: %d Could not open file: %s \n", __FUNCTION__, __LINE__, nmea_complete_path.c_str());
+        return false;
+    }
+    fclose(fp);
+    fp = nullptr;
+    return true;
+}
+
+bool ParserMock::createThreadPool()
+{
+    if (!mParserThreadPoolObj)
+    {
+        int latency, interval;
+        latency = getMockLatency();
+        interval = latency/2;
+
+        mParserThreadPoolObj = new ParserThreadPool(1, interval);
+
+        if(!mParserThreadPoolObj)
+        {
+          return false;
+        }
+        nyx_info("MSGID_NMEA_PARSER_MOCK", 0, "Created Mock ThreadPool with interval: %d \n", interval);
+    }
+    return true;
+}
+
 int ParserMock::getMockLatency()
 {
     int latency;
@@ -99,7 +165,7 @@ int ParserMock::getMockLatency()
 
     if (!latency)
     {
-        nyx_debug("config file latency not available so default latency:%d\n", DEFAULT_LATENCY);
+        nyx_info("MSGID_NMEA_PARSER_MOCK", 0, "config file latency not available so default latency:%d\n", DEFAULT_LATENCY);
         latency = DEFAULT_LATENCY;
     }
 
@@ -124,15 +190,13 @@ bool ParserMock::startParsing()
         return false;
     }
 
-    nyx_info("MSGID_NMEA_PARSER_MOCK", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
-
     SetGpsStatus(NYX_GPS_STATUS_SESSION_BEGIN);
 
     if (mSeekOffset)
     {
         (void)fseek(mNmeaFp, mSeekOffset, SEEK_SET);
     }
-    nyx_info("MSGID_NMEA_PARSER_MOCK", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
+
     char pBuff[1024];
     while (mNmeaFp && feof(mNmeaFp) == 0)
     {
@@ -155,7 +219,6 @@ bool ParserMock::startParsing()
         }
         mSeekOffset += nBytesRead;
     }
-    nyx_info("MSGID_NMEA_PARSER_MOCK", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
 
     if (mNmeaFp)
     {
@@ -163,7 +226,6 @@ bool ParserMock::startParsing()
         mNmeaFp = nullptr;
     }
 
-    nyx_info("MSGID_NMEA_PARSER_MOCK", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
     if (mParserInotifyObj)
         mParserInotifyObj->startWatch();
 
@@ -182,6 +244,7 @@ bool ParserMock::stopParsing()
         fclose(mNmeaFp);
         mNmeaFp = nullptr;
     }
+
     SetGpsStatus(NYX_GPS_STATUS_SESSION_END);
     return true;
 }

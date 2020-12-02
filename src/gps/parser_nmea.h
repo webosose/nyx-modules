@@ -39,26 +39,24 @@ typedef struct {
     double vertAccuracy;
 } gps_data;
 
-
 class ParserNmea : public CNMEAParser {
 public:
     static ParserNmea *getInstance();
     bool initParsingModule();
+    bool deinitParsingModule();
     bool startParsing();
     bool stopParsing();
     ParserNmea();
     ~ParserNmea();
 
-    virtual CNMEAParserData::ERROR_E ProcessRxCommand(char *pCmd, char *pData, char *checksum);
-    virtual void OnError(CNMEAParserData::ERROR_E nError, char *pCmd);
 
 private:
 
     gps_data mGpsData;
-
+    virtual CNMEAParserData::ERROR_E ProcessRxCommand(char *pCmd, char *pData, char *checksum);
+    virtual void OnError(CNMEAParserData::ERROR_E nError, char *pCmd);
     void init();
     void deinit();
-
     void sendLocationUpdates();
     void sendNmeaUpdates(char *rawNmea);
     bool SetGpsRMC_Data(CNMEAParserData::RMC_DATA_T *rmcData, char *nmea_data);

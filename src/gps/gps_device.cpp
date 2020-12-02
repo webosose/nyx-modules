@@ -29,7 +29,6 @@
 GPSDevice::GPSDevice()
     : mFd(INVALID_FD)
     , mGpsDevAvail(false)
-    , mGPSConfig(false)
     , mReadChannel(nullptr)
     , mIoWatchId(0)
     , mKeyfile(nullptr)
@@ -193,18 +192,19 @@ bool GPSDevice::deinit()
     nyx_info("GPS_DEVICE", 0, "%s", __FUNCTION__);
     if (mReadChannel)
     {
+        mIoWatchId = 0;
         g_io_channel_shutdown(mReadChannel, true, NULL);
         g_io_channel_unref(mReadChannel);
+        mReadChannel = nullptr;
     }
     if (mFd != INVALID_FD)
     {
         close(mFd);
+        mFd = INVALID_FD;
     }
-    mReadChannel = nullptr;
-    mFd = INVALID_FD;
+
     mData.clear();
     mGpsDevAvail = false;
-    mIoWatchId = 0;
     return true;
 }
 
@@ -214,21 +214,13 @@ bool GPSDevice::loadGPSConfig(const std::string &fileName)
     mKeyfile = load_conf_file(fileName.c_str());
     if (mKeyfile)
     {
-        mGPSConfig = true;
         nyx_info("MSGID_GPS_CONFIG", 0, "GPS conf file:%s loading success\n", fileName.c_str());
+        return true;
     }
-    else
-    {
-        mGPSConfig = false;
-        nyx_error("MSGID_GPS_CONFIG", 0, "GPS conf file:%s load failed\n", fileName.c_str());
-    }
+    nyx_error("MSGID_GPS_CONFIG", 0, "GPS conf file:%s load failed\n", fileName.c_str());
+    return false;
 
-    return mGPSConfig;
-}
 
-bool GPSDevice::isGPSConfigured()
-{
-    return mGPSConfig;
 }
 
 std::string GPSDevice::getValue(const std::string &key)
@@ -244,6 +236,7 @@ std::string GPSDevice::getValue(const std::string &key)
             return data;
         }
         data = value;
+        g_free(value);
     }
     else
     {
