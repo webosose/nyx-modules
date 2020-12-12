@@ -40,12 +40,12 @@ public:
     bool startParsing();
     bool stopParsing();
     bool isSourcePresent();
+    bool isMockEnabled();
     bool isParserRequested() const { return mParserRequested; }
     ParserThreadPool* getThreadPoolObj() const { return mParserThreadPoolObj; }
 private:
     ParserMock();
     ~ParserMock();
-    bool isMockEnabled();
     int getMockLatency();
     bool createThreadPool();
     FILE *mNmeaFp;

@@ -76,11 +76,10 @@ ParserMock *ParserMock::getInstance()
 bool ParserMock::init()
 {
 
-    if(!isMockEnabled())
+    if(!isSourcePresent())
       return false;
 
-    mParserRequested = isSourcePresent();
-    createThreadPool();
+    mParserRequested = true;
 
     return true;
 }
@@ -94,6 +93,17 @@ bool ParserMock::deinit()
         delete mParserThreadPoolObj;
         mParserThreadPoolObj = nullptr;
     }
+
+    if (mNmeaFp)
+    {
+        mStopParser = true;
+        fclose(mNmeaFp);
+        mNmeaFp = nullptr;
+    }
+
+    mSeekOffset = 0;
+
+    SetGpsStatus(NYX_GPS_STATUS_SESSION_END);
     return true;
 }
 
@@ -190,6 +200,8 @@ bool ParserMock::startParsing()
         return false;
     }
 
+    createThreadPool();
+
     SetGpsStatus(NYX_GPS_STATUS_SESSION_BEGIN);
 
     if (mSeekOffset)
@@ -234,18 +246,10 @@ bool ParserMock::startParsing()
 
 bool ParserMock::stopParsing()
 {
-    mSeekOffset = 0;
+
     if (mParserInotifyObj)
         mParserInotifyObj->stopWatch();
 
-    if (mNmeaFp)
-    {
-        mStopParser = true;
-        fclose(mNmeaFp);
-        mNmeaFp = nullptr;
-    }
-
-    SetGpsStatus(NYX_GPS_STATUS_SESSION_END);
     return true;
 }
 

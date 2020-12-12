@@ -123,6 +123,10 @@ static int  loc_start() {
 }
 
 static int  loc_stop() {
+
+    if (parserNmeaObj && !parserNmeaObj->deinitParsingModule())
+        return 0;
+
     parserThreadPoolObj->enqueue(&stopParsing);
     return 0;
 }
@@ -153,11 +157,7 @@ bool stopParsing() {
     parsing_engine_on = false;
 
     if (parserNmeaObj)
-    {
-        bool stop = parserNmeaObj->stopParsing();
-        parserNmeaObj->deinitParsingModule();
-        return stop;
-    }
+        return parserNmeaObj->stopParsing();
    return false;
 }
 

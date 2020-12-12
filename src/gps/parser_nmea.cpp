@@ -301,9 +301,9 @@ bool ParserNmea::initParsingModule() {
 
     nyx_info("MSGID_NMEA_PARSER", 0, "Fun: %s, Line: %d \n", __FUNCTION__, __LINE__);
     init();
-    if (ParserMock::getInstance()->init())
+    if (ParserMock::getInstance()->isMockEnabled())
     {
-        return ParserMock::getInstance()->isSourcePresent();
+        return ParserMock::getInstance()->init();
     }
     return ParserHW::getInstance()->init();
 }

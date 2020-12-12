@@ -60,8 +60,8 @@ bool ParserHW::init()
     if(!mGPSDeviceObj->init())
       return false;
 
-    mParserRequested = isSourcePresent();
-    createThreadPool();
+    mParserRequested = true;
+
     return true;
 }
 
@@ -73,6 +73,9 @@ bool ParserHW::isSourcePresent()
 bool ParserHW::deinit()
 {
     mParserRequested = false;
+
+    SetGpsStatus(NYX_GPS_STATUS_SESSION_END);
+
     return mGPSDeviceObj->isGpsDevAvail()?mGPSDeviceObj->deinit():false;
 
 }
@@ -90,7 +93,6 @@ bool ParserHW::startParsing()
 
 bool ParserHW::stopParsing()
 {
-    SetGpsStatus(NYX_GPS_STATUS_SESSION_END);
 
     if (mParserThreadPoolObj)
     {
