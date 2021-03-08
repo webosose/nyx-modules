@@ -1,4 +1,4 @@
-// Copyright (c) 2010-2018 LG Electronics, Inc.
+// Copyright (c) 2010-2021 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -162,7 +162,7 @@ nyx_error_t system_query_next_alarm(nyx_device_handle_t handle, time_t *time)
 		return NYX_ERROR_INVALID_OPERATION;
 	}
 
-	if (rtc_read_alarm_time(time) < 0)
+	if (rtc_read_alarm_time(time) == false)
 	{
 		return NYX_ERROR_INVALID_OPERATION;
 	}

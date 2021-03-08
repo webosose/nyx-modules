@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2018 LG Electronics, Inc.
+// Copyright (c) 2012-2021 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -70,6 +71,7 @@ static nyx_error_t read_device_nduid(char nduid[NDUID_LEN + 1])
 {
 	nyx_error_t error = NYX_ERROR_NONE;
 	FILE *fp = fopen(NDUID_PATH, "r");
+	int ret = -1;
 
 	if (!fp)
 	{
@@ -78,7 +80,7 @@ static nyx_error_t read_device_nduid(char nduid[NDUID_LEN + 1])
 		goto error;
 	}
 
-	int ret = fread(nduid, NDUID_LEN, 1, fp);
+	ret = fread(nduid, NDUID_LEN, 1, fp);
 
 	if (ret <= 0)
 	{
@@ -102,14 +104,11 @@ error:
 static nyx_error_t write_device_nduid(const char nduid[NDUID_LEN + 1])
 {
 	nyx_error_t error = NYX_ERROR_NONE;
-	struct stat st;
+	int ret = -1;
 
-	if (stat(NDUID_DIR, &st) != 0)
+	if ((mkdir(NDUID_DIR, (mode_t)0755)  == -1) && (errno != EEXIST))
 	{
-		if (mkdir(NDUID_DIR, 0755) < 0)
-		{
-			return NYX_ERROR_GENERIC;
-		}
+		return NYX_ERROR_GENERIC;
 	}
 
 	FILE *fp = fopen(NDUID_PATH, "w");
@@ -122,7 +121,7 @@ static nyx_error_t write_device_nduid(const char nduid[NDUID_LEN + 1])
 		goto error;
 	}
 
-	int ret = fwrite(nduid, NDUID_LEN, 1, fp);
+	ret = fwrite(nduid, NDUID_LEN, 1, fp);
 
 	if (ret <= 0)
 	{
