@@ -65,7 +65,7 @@ inline ParserThreadPool::ParserThreadPool(size_t threads, unsigned int sleepTime
             {
                 for(;;)
                 {
-                    std::function<void()> task;
+                    std::function<void()> task = [] () {};
 
                     {
                         std::unique_lock<std::mutex> lock(this->queue_mutex);
