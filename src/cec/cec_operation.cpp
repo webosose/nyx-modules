@@ -20,7 +20,7 @@
 *******************************************************************/
 
 #include "cec_operation.h"
-
+#include <sstream>
 #include <stdio.h>
 
 int fd1[2], fd2[2];
@@ -74,9 +74,14 @@ void CecHandler::deinit()
 std::vector<std::string> CecHandler::executeSingleCommand(std::string cmd)
 {
     std::vector<std::string> cmdResp;
-    if (cmd.empty()) return cmdResp;
+    if (cmd.empty()) {
+        return cmdResp;
+    }
     // Execute command and parse response
     FILE *fp = popen(cmd.c_str(), "r");
+    if(fp == NULL){
+        return cmdResp;
+    }
     char buffer[100]={'\0'};
     std::string inp;
     while(fgets(buffer, sizeof(buffer), fp))
@@ -86,6 +91,7 @@ std::vector<std::string> CecHandler::executeSingleCommand(std::string cmd)
         // Update local variables
         cmdResp.push_back(inp);
     }
+    fclose(fp);
     return cmdResp;
 }
 
@@ -147,12 +153,15 @@ std::vector<std::string> CecHandler::getResponse()
         {
             if (response[i].find("device #" + deviceNum + ":") != std::string::npos)
             {
-        	    physicalAddress = response[i+1].substr(response[i+1].find(":") + 1);
-        	    osdName = response[i+4].substr(response[i+4].find(":") + 1);
-        	    version = response[i+5].substr(response[i+5].find(":") + 1);
-        	    powerStatus = response[i+6].substr(response[i+6].find(":") + 1);
-        	    lang = response[i+7].substr(response[i+7].find(":") + 1);
-    	    break;
+                deviceType = response[i].substr(response[i].find(":") + 1);
+                std::istringstream dType(deviceType);
+                dType >> deviceType;
+                physicalAddress = response[i+1].substr(response[i+1].find(":") + 1);
+                osdName = response[i+4].substr(response[i+4].find(":") + 1);
+                version = response[i+5].substr(response[i+5].find(":") + 1);
+                powerStatus = response[i+6].substr(response[i+6].find(":") + 1);
+                lang = response[i+7].substr(response[i+7].find(":") + 1);
+                break;
             }
         }
     }
@@ -235,6 +244,12 @@ std::string CecHandler::getLang()
 std::string CecHandler::getLogicalAddress()
 {
     std::string resp = "logical address: " + deviceNum;
+    return resp;
+}
+
+std::string CecHandler::getDeviceType()
+{
+    std::string resp = "type: " + deviceType;
     return resp;
 }
 

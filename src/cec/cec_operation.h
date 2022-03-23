@@ -59,6 +59,7 @@ private:
     std::string lang;
     std::string type;
     std::string cmdName;
+    std::string deviceType;
 public:
     ~CecHandler();
     static CecHandler& getInst();
@@ -77,5 +78,6 @@ public:
     std::string getPowerStatus();
     std::string getLang();
     std::string getLogicalAddress();
+    std::string getDeviceType();
 };
 #endif

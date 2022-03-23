@@ -184,6 +184,8 @@ nyx_error_t cec_send_command(nyx_device_handle_t handle, nyx_cec_command_t *comm
             cmd = "on " + address;
         else if (cmdName == "report-power-status" && params["pwr-state"] == "standby")
             cmd = "standby " + address;
+        else if (cmdName == "report-power-status" && params["pwr-state"] == "")
+            cmd = "pow " + address;
         else if (cmdName == "report-audio-status" && params["aud-mute-status"] == "on")
             cmd = "mute";
         else if (cmdName == "report-audio-status" && params["aud-mute-status"] == "off")
@@ -219,7 +221,7 @@ nyx_error_t cec_send_command(nyx_device_handle_t handle, nyx_cec_command_t *comm
             CecHandler::getInst().addRequest(cmdType, cmd);
             response = CecHandler::getInst().getResponse();
         if(response.empty())
-    	response.push_back("response: success");
+        response.push_back("response: success");
     }
     }
     if (!response.empty())
@@ -275,6 +277,10 @@ nyx_error_t cec_get_config(nyx_device_handle_t handle, char *type, char **value)
         resp = CecHandler::getInst().getAddress();
     else if(cmdType == "logicalAddress")
         resp = CecHandler::getInst().getLogicalAddress();
+    else if(cmdType == "deviceType")
+        resp = CecHandler::getInst().getDeviceType();
+    else
+        return NYX_ERROR_NOT_IMPLEMENTED;
 
     if (!resp.empty())
         strcpy(*value, resp.c_str());
