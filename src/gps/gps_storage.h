@@ -1,6 +1,6 @@
 /* @@@LICENSE
  * *
- * * Copyright (c) 2020 LG Electronics, Inc.
+ * * Copyright (c) 2020-2023 LG Electronics, Inc.
  * *
  * * Licensed under the Apache License, Version 2.0 (the "License");
  * * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ static GKeyFile *load_conf_file(const char *file_path_name)
     GKeyFile *keyfile = g_key_file_new();
 
     if (!g_key_file_load_from_file(keyfile, file_path_name, G_KEY_FILE_NONE, &error)) {
-        nyx_error("MSGID_GPS_STORAGE", 0, "file: %s  load failed: %s\n", file_path_name, error->message);
+        nyx_error("MSGID_GPS_STORAGE", 0, "file load failed: %s\n",error->message);
         g_clear_error(&error);
 
         g_key_file_free(keyfile);
@@ -55,7 +55,7 @@ static bool save_conf_data(GKeyFile *keyfile, const char *file_path_name)
     gchar *dataString = g_key_file_to_data(keyfile, &dataStringLen, NULL);
 
     if (!g_file_set_contents(file_path_name, dataString, dataStringLen, &error)) {
-        nyx_error("MSGID_GPS_STORAGE", 0, "file: %s  save failed: %s\n", file_path_name, error->message);
+        nyx_error("MSGID_GPS_STORAGE", 0, "file  save failed: %s\n",error->message);
         g_error_free(error);
         ret = false;
     }
