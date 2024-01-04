@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2021 LG Electronics, Inc.
+// Copyright (c) 2012-2024 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -353,6 +353,61 @@ static nyx_error_t execute_read_info(const char *command, char **target)
 	return retVal;
 }
 
+static void trim_whitespaces(char *str)
+{
+	size_t len = strlen(str);
+	if (!str || len == 0) return;
+
+	int start = 0;
+	while (isspace(str[start]))
+		start++;
+
+	int end = len - 1;
+	while (end > start && isspace(str[end]))
+		end--;
+
+	int shiftIndex = 0;
+	for (int i = start; i <= end; i++)
+		str[shiftIndex++] = str[i];
+
+	str[shiftIndex] = '\0';
+}
+
+// Returns a value string that matches the given key string in /etc/buildinfo
+// The caller is responsible to deallocate the returned string.
+#define BUILDINFO_MAX_LINE_LENGTH 512
+static char *get_buildinfo(const char *key)
+{
+	FILE *fp = fopen("/etc/buildinfo", "r");
+	if (fp == NULL)
+		return NULL;
+
+	char line[BUILDINFO_MAX_LINE_LENGTH];
+	char *value = NULL;
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		if (line[0] == '#' || line[0] == '\n')
+			continue;
+
+		char *sep = strchr(line, '=');
+		if (sep != NULL) {
+			*sep = '\0';
+			char k[BUILDINFO_MAX_LINE_LENGTH];
+			char v[BUILDINFO_MAX_LINE_LENGTH];
+			strncpy(k, line, sizeof(k));
+			strncpy(v, sep + 1, sizeof(v));
+			trim_whitespaces(k);
+			trim_whitespaces(v);
+			if (strcmp(key, k) == 0) {
+				value = strdup(v);
+				break;
+			}
+		}
+	}
+
+	fclose(fp);
+	return value;
+}
+
 nyx_error_t nyx_module_open(nyx_instance_t i, nyx_device_t **d)
 {
 	if (NULL == d)
@@ -394,8 +449,9 @@ nyx_error_t nyx_module_open(nyx_instance_t i, nyx_device_t **d)
 		goto nduid_err;
 	}
 
-	device->product_name = DEVICEINFO_PRODUCT_NAME;
-	device->device_name = WEBOS_TARGET_MACHINE;
+	char *machine = get_buildinfo("MACHINE");
+	device->product_name = machine;
+	device->device_name = machine;
 	device->wifi_mac = NULL;
 	device->wired_mac = NULL;
 	device->bdaddr = NULL;

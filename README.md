@@ -51,11 +51,6 @@ by supplying a semicolon-separated value for `NYX_MODULES_REQUIRED`. For example
 
 will install the files in subdirectories of `$HOME/projects/webosose`.
 
-Note that only modules in the "generic" subdir will build on/for the desktop,
-unless you override the value of WEBOS_TARGET_CORE_OS. For example:
-
-	$ cmake -D WEBOS_INSTALL_ROOT:PATH=$HOME/projects/webosose -DNYX_MODULES_REQUIRED="NYXMOD_OW_CHARGER" -DWEBOS_TARGET_CORE_OS=rockhopper ..
-
 Specifying `WEBOS_INSTALL_ROOT` also causes `pkg-config` to look in that tree
 first before searching the standard locations. You can specify additional
 directories to be searched prior to this one by setting the `PKG_CONFIG_PATH`
@@ -84,7 +79,7 @@ You will need to use `sudo` if you did not specify `WEBOS_INSTALL_ROOT`.
 Unless otherwise specified, all content, including all source code files and
 documentation files in this repository are:
 
-Copyright (c) 2010-2018 LG Electronics, Inc.
+Copyright (c) 2010-2024 LG Electronics, Inc.
 
 Unless otherwise specified or set forth in the NOTICE file, all content,
 including all source code files and documentation files in this repository are:

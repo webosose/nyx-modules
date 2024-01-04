@@ -1,4 +1,4 @@
-# Copyright (c) 2010-2022 LG Electronics, Inc.
+# Copyright (c) 2010-2024 LG Electronics, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,10 +13,6 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-
-webos_machine_dep()
-webos_machine_impl_dep()
-webos_core_os_dep()
 
 include(FindPkgConfig)
 
@@ -57,8 +53,6 @@ if(NYXMOD_OW_CHARGER)
 endif()
 
 if(NYXMOD_OW_DEVICEINFO)
-    add_definitions(-DWEBOS_TARGET_MACHINE="${WEBOS_TARGET_MACHINE}")
-    add_definitions(-DDEVICEINFO_PRODUCT_NAME="${WEBOS_TARGET_MACHINE}")
     add_subdirectory(device_info)
 endif()
 
