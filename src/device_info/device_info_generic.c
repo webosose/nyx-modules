@@ -355,8 +355,9 @@ static nyx_error_t execute_read_info(const char *command, char **target)
 
 static void trim_whitespaces(char *str)
 {
+	if (!str) return;
 	size_t len = strlen(str);
-	if (!str || len == 0) return;
+	if (len == 0) return;
 
 	int start = 0;
 	while (isspace(str[start]))
