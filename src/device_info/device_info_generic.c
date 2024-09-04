@@ -32,6 +32,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <openssl/sha.h>
+#include <ctype.h>
 
 #include <nyx/nyx_module.h>
 #include <nyx/module/nyx_utils.h>
